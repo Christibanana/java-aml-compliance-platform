@@ -1,0 +1,2 @@
+tran_id,tran_timestamp,base_amt,tx_type,orig_acct,bene_acct,is_sar,alert_id
+AMLSIM-DEMO-001,2026-10-14T08:00:00Z,1000.00,TRANSFER,ACC-MODULE-001,AMLSIM-CP-001,false,-1

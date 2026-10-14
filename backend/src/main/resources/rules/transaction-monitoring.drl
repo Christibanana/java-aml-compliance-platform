@@ -1,0 +1,27 @@
+package rules
+
+import com.example.aml.rule.RuleEvaluationFact;
+
+rule "AML-R001 large transaction"
+no-loop true
+when
+    $fact : RuleEvaluationFact(ruleCode == "AML-R001", matched == false, metric.compareTo(threshold) >= 0)
+then
+    $fact.markMatched();
+end
+
+rule "AML-R002 high frequency window"
+no-loop true
+when
+    $fact : RuleEvaluationFact(ruleCode == "AML-R002", matched == false, metric.compareTo(threshold) >= 0)
+then
+    $fact.markMatched();
+end
+
+rule "AML-R003 aggregate amount window"
+no-loop true
+when
+    $fact : RuleEvaluationFact(ruleCode == "AML-R003", matched == false, metric.compareTo(threshold) >= 0)
+then
+    $fact.markMatched();
+end

@@ -1,0 +1,3 @@
+AML case investigation verification evidence
+Purpose: end-to-end validation of alert escalation, investigation and case closure.
+Classification: synthetic test data only.

@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:aml;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+  jpa.hibernate.ddl-auto: create-drop
+  flyway.enabled: false
+aml:
+  jwt.secret: test-secret-key-that-is-longer-than-thirty-two-bytes
+  jwt.expiration-minutes: 10
+  screening.provider: MOCK
+  screening.yente.enabled: false
+  screening.yente.base-url: http://localhost:65535
+  screening.yente.dataset: default
+  screening.yente.api-key:
+  screening.yente.threshold: 0.7
+  screening.yente.timeout-seconds: 1
+  evidence.storage-root: target/test-evidence
+  evidence.max-size-bytes: 10485760

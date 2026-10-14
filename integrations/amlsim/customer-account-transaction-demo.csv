@@ -1,0 +1,2 @@
+externalId,accountNo,counterpartyAccount,direction,amount,currency,transactionTime,transactionType,description
+TX-MODULE-001,ACC-MODULE-001,CP-DEMO-001,IN,1250.50,CNY,2026-10-14T03:00:00Z,TRANSFER,"模拟入账,用于模块验收"

@@ -1,0 +1,2 @@
+externalId,accountNo,counterpartyAccount,direction,amount,currency,transactionTime,transactionType,description
+TX-RULE-LARGE-001,ACC-RULE-20261014,CP-LARGE,IN,150000.00,CNY,2026-10-14T04:31:00Z,TRANSFER,controlled large transaction rule test

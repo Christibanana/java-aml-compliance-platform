@@ -1,0 +1,42 @@
+spring:
+  application.name: java-aml-platform
+  datasource:
+    url: ${AML_DB_URL:jdbc:postgresql://localhost:5432/aml}
+    username: ${AML_DB_USER:aml}
+    password: ${AML_DB_PASSWORD:aml_local_only}
+  jpa:
+    open-in-view: false
+    hibernate.ddl-auto: validate
+    properties.hibernate.jdbc.time_zone: UTC
+  flyway.enabled: true
+  servlet.multipart:
+    max-file-size: 10MB
+    max-request-size: 10MB
+server.port: ${AML_BACKEND_PORT:8080}
+management.endpoints.web.exposure.include: health,info
+springdoc:
+  swagger-ui.path: /swagger-ui.html
+aml:
+  jwt:
+    secret: ${AML_JWT_SECRET:local-development-secret-must-be-at-least-32-bytes}
+    expiration-minutes: ${AML_JWT_EXPIRATION_MINUTES:120}
+  screening:
+    provider: ${AML_SCREENING_PROVIDER:MOCK}
+    yente:
+      enabled: ${AML_YENTE_ENABLED:false}
+      base-url: ${AML_YENTE_URL:http://localhost:8000}
+      dataset: ${AML_YENTE_DATASET:default}
+      api-key: ${AML_YENTE_API_KEY:}
+      threshold: ${AML_YENTE_THRESHOLD:0.7}
+      timeout-seconds: ${AML_YENTE_TIMEOUT_SECONDS:5}
+  integration:
+    fineract:
+      enabled: ${AML_FINERACT_ENABLED:false}
+      base-url: ${AML_FINERACT_URL:http://localhost:8443/fineract-provider/api/v1}
+      username: ${AML_FINERACT_USERNAME:mifos}
+      password: ${AML_FINERACT_PASSWORD:password}
+      tenant: ${AML_FINERACT_TENANT:default}
+      timeout-seconds: ${AML_FINERACT_TIMEOUT_SECONDS:5}
+  evidence:
+    storage-root: ${AML_EVIDENCE_STORAGE_ROOT:./data/evidence}
+    max-size-bytes: ${AML_EVIDENCE_MAX_SIZE_BYTES:10485760}

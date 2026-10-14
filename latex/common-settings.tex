@@ -1,0 +1,37 @@
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs,longtable,array,tabularx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{float}
+\usepackage{listings}
+\hypersetup{colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!65!black}
+\setlist{nosep,leftmargin=2em}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.35em}
+\sloppy
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Java AML 反洗钱合规管理平台}
+\fancyhead[R]{教学演示文档}
+\fancyfoot[C]{\thepage}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,frame=single,columns=fullflexible}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\shot}[3]{%
+  \begin{figure}[H]\centering
+  \includegraphics[width=#1\textwidth,height=0.72\textheight,keepaspectratio]{../figures/screenshots/#2}
+  \caption{#3（模拟/合成数据）}
+  \end{figure}}
+\newcommand{\doccover}[2]{%
+  \begin{titlepage}\centering
+  \vspace*{4cm}
+  {\Huge\bfseries #1\par}
+  \vspace{1.2cm}
+  {\Large Java AML 反洗钱合规管理平台\par}
+  \vfill
+  {\large #2\par}
+  \vspace{0.6cm}
+  {\large 2026 年 10 月\par}
+  \end{titlepage}}

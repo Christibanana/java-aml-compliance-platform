@@ -1,0 +1,16 @@
+.env
+.idea/
+.vscode/
+backend/target/
+frontend/node_modules/
+frontend/dist/
+*.log
+*.tsbuildinfo
+data/evidence/
+.tools/
+latex/**/*.aux
+latex/**/*.log
+latex/**/*.out
+latex/**/*.toc
+latex/**/*.xdv
+latex/**/*.synctex.gz

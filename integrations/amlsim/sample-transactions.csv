@@ -1,0 +1,3 @@
+externalId,accountNo,counterpartyAccount,direction,amount,currency,transactionTime,transactionType,description
+TX-DEMO-001,ACC-DEMO-001,CP-001,IN,120000.00,CNY,2026-10-13T02:00:00Z,TRANSFER,synthetic large transaction
+TX-DEMO-002,ACC-DEMO-001,CP-002,OUT,850.50,CNY,2026-10-13T03:00:00Z,PAYMENT,synthetic normal transaction

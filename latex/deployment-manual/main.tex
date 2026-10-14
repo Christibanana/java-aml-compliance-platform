@@ -1,0 +1,49 @@
+\documentclass[UTF8,zihao=-4]{ctexart}
+\input{../common-settings.tex}
+\begin{document}
+\doccover{Java AML 反洗钱系统部署手册}{本地教学环境}
+\tableofcontents
+
+\section{部署范围与前提}
+推荐使用 Docker Desktop 和 Docker Compose 运行 PostgreSQL、Spring Boot 后端与 Nginx 前端。源码单独运行需要 JDK 21、Maven 3.9+、Node.js/npm 和 PostgreSQL 16。系统是教学环境，不含生产级 TLS、密钥托管、高可用、对象存储或集中监控。
+
+\section{配置环境变量}
+在项目根目录复制 \code{.env.example} 为 \code{.env}。至少替换数据库密码、长度足够的随机 JWT 密钥和演示账号密码。真实部署禁止启用开发默认凭据。Yente 与 Fineract 默认关闭；只有目标服务、网络、凭据和许可均确认后才能启用。
+
+\section{Compose 启动}
+\begin{lstlisting}
+docker compose config --quiet
+docker compose --profile app up -d --build
+docker compose --profile app ps
+\end{lstlisting}
+等待 PostgreSQL healthy 和后端启动后访问：前端 \url{http://localhost:5173}，健康接口 \url{http://localhost:8080/actuator/health}，OpenAPI \url{http://localhost:8080/swagger-ui.html}。
+
+停止服务可执行 \code{docker compose --profile app down}。除非明确需要清除全部本地业务数据，不要添加 \code{-v}；删除命名卷不可恢复。
+
+\section{数据库迁移}
+后端启动时 Flyway 自动按顺序执行 V1--V6，Hibernate 随后以 validate 模式校验结构。不得使用 Hibernate 自动建表或手工修改生产结构。空库验证已在 PostgreSQL 16.10 上通过，共得到 34 张应用表、49 个外键和 81 个索引，另含 Flyway 历史表。
+
+\section{源码构建与验证}
+\begin{lstlisting}
+cd backend
+mvn -B clean verify
+cd ..\frontend
+npm ci
+npm run build
+npm audit --omit=dev
+cd ..
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\e2e-smoke.ps1
+\end{lstlisting}
+2026-10-15 最终验证结果：后端 32 个测试全部通过；前端构建成功，生产依赖审计为 0 漏洞；PostgreSQL healthy，后端 health 为 UP，OpenAPI 与前端均返回 200；E2E 最终案件为 CLOSED，规则重复执行新增命中为 0。
+
+\section{故障排查}
+若 Docker Desktop 报 WSL 数据盘仍附加，可先停止 Docker Desktop，执行 \code{wsl --shutdown} 后重启。本次验证以此方式恢复且没有重置或删除数据卷。若持续出现 I/O 错误，应先备份并释放宿主磁盘空间，再由操作者决定是否修复 Docker 数据盘，不能直接执行破坏性重置。
+
+端口冲突时通过 \code{AML_POSTGRES_HOST_PORT}、\code{AML_BACKEND_HOST_PORT}、\code{AML_FRONTEND_HOST_PORT} 覆盖宿主端口。外部服务不可用时保持 Yente/Fineract 关闭，本地客户、交易、规则、预警、案件、Mock 筛查和报表仍可运行。
+
+\section{安全与备份}
+共享环境必须替换所有占位凭据、限制数据库和 API 网络暴露、配置 TLS、备份 PostgreSQL 命名卷与案件证据卷，并验证恢复流程。证据文件当前没有病毒扫描；不要上传未知或真实敏感文件。审计和业务历史应按保留策略归档，避免物理删除。
+
+\section{交付边界}
+真实 Yente/Fineract 未联调；R004--R008、复杂图规则、正式监管报送等未实现。项目尚无 LICENSE/NOTICE，公开发布前由所有者选择许可。完整测试证据见 \code{docs/TEST_RESULTS.md}，部署问题见 \code{docs/ISSUES.md}，最终清单见 \code{docs/final-delivery-checklist.md}。
+\end{document}

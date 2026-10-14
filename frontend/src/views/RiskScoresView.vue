@@ -1,0 +1,17 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { http } from '../api/http'
+import { ElMessage } from 'element-plus'
+
+const customerId=ref(''),transactionId=ref(''),customer=ref<any>(),transaction=ref<any>(),customerHistory=ref<any[]>([]),transactionHistory=ref<any[]>([])
+async function calculateCustomer(){if(!customerId.value)return ElMessage.warning('请输入客户 UUID');customer.value=(await http.post(`/risk-scores/customers/${customerId.value}/calculate`)).data;customerHistory.value=(await http.get(`/risk-scores/customers/${customerId.value}/history`)).data}
+async function calculateTransaction(){if(!transactionId.value)return ElMessage.warning('请输入交易 UUID');transaction.value=(await http.post(`/risk-scores/transactions/${transactionId.value}/calculate`)).data;transactionHistory.value=(await http.get(`/risk-scores/transactions/${transactionId.value}/history`)).data}
+function levelType(level:string){return level==='HIGH'?'danger':level==='MEDIUM'?'warning':'success'}
+</script>
+
+<template><div><div class="page-head"><h2>风险评分</h2></div><el-alert title="确定性教学评分仅用于案件和预警优先级排序，不构成违法、制裁或监管结论。" type="warning" show-icon :closable="false"/>
+  <el-row :gutter="18" class="cards"><el-col :span="12"><div class="panel"><h3>客户风险评分</h3><div class="input-row"><el-input v-model="customerId" placeholder="客户 UUID"/><el-button type="primary" @click="calculateCustomer">计算并留存历史</el-button></div><el-descriptions v-if="customer" :column="2" border><el-descriptions-item label="分数">{{customer.score}}</el-descriptions-item><el-descriptions-item label="等级"><el-tag :type="levelType(customer.riskLevel)">{{customer.riskLevel}}</el-tag></el-descriptions-item><el-descriptions-item label="模型">{{customer.modelVersion}}</el-descriptions-item><el-descriptions-item label="筛查数据性质">{{customer.sourceDataMode}}</el-descriptions-item><el-descriptions-item label="解释" :span="2"><pre>{{customer.explanation}}</pre></el-descriptions-item></el-descriptions><el-table :data="customerHistory" size="small"><el-table-column prop="score" label="分数"/><el-table-column prop="riskLevel" label="等级"/><el-table-column prop="sourceDataMode" label="数据性质"/><el-table-column prop="assessedAt" label="时间"/></el-table></div></el-col>
+  <el-col :span="12"><div class="panel"><h3>交易风险评分</h3><div class="input-row"><el-input v-model="transactionId" placeholder="交易 UUID"/><el-button type="primary" @click="calculateTransaction">计算并留存历史</el-button></div><el-descriptions v-if="transaction" :column="2" border><el-descriptions-item label="分数">{{transaction.score}}</el-descriptions-item><el-descriptions-item label="等级"><el-tag :type="levelType(transaction.riskLevel)">{{transaction.riskLevel}}</el-tag></el-descriptions-item><el-descriptions-item label="模型">{{transaction.modelVersion}}</el-descriptions-item><el-descriptions-item label="筛查数据性质">{{transaction.sourceDataMode}}</el-descriptions-item><el-descriptions-item label="解释" :span="2"><pre>{{transaction.explanation}}</pre></el-descriptions-item></el-descriptions><el-table :data="transactionHistory" size="small"><el-table-column prop="score" label="分数"/><el-table-column prop="riskLevel" label="等级"/><el-table-column prop="sourceDataMode" label="数据性质"/><el-table-column prop="assessedAt" label="时间"/></el-table></div></el-col></el-row>
+</div></template>
+
+<style scoped>.cards{margin-top:18px}.input-row{display:flex;gap:10px;margin-bottom:16px}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 monospace}.el-table{margin-top:16px}</style>

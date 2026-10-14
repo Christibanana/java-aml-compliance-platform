@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16.10-alpine
+    environment:
+      POSTGRES_DB: ${AML_DB_NAME:-aml}
+      POSTGRES_USER: ${AML_DB_USER:-aml}
+      POSTGRES_PASSWORD: ${AML_DB_PASSWORD:-aml_local_only}
+    ports: ["${AML_POSTGRES_HOST_PORT:-5432}:5432"]
+    volumes: ["aml-postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  backend:
+    build: ./backend
+    profiles: ["app"]
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      AML_DB_URL: jdbc:postgresql://postgres:5432/${AML_DB_NAME:-aml}
+      AML_DB_USER: ${AML_DB_USER:-aml}
+      AML_DB_PASSWORD: ${AML_DB_PASSWORD:-aml_local_only}
+      AML_JWT_SECRET: ${AML_JWT_SECRET:-local-development-secret-must-be-at-least-32-bytes}
+      AML_DEMO_USERNAME: ${AML_DEMO_USERNAME:-admin}
+      AML_DEMO_PASSWORD: ${AML_DEMO_PASSWORD:-ChangeMe123!}
+      AML_EVIDENCE_STORAGE_ROOT: /app/data/evidence
+      AML_SCREENING_PROVIDER: ${AML_SCREENING_PROVIDER:-MOCK}
+      AML_YENTE_ENABLED: ${AML_YENTE_ENABLED:-false}
+      AML_YENTE_URL: ${AML_YENTE_URL:-http://host.docker.internal:8000}
+      AML_YENTE_DATASET: ${AML_YENTE_DATASET:-default}
+      AML_YENTE_API_KEY: ${AML_YENTE_API_KEY:-}
+      AML_YENTE_THRESHOLD: ${AML_YENTE_THRESHOLD:-0.7}
+      AML_YENTE_TIMEOUT_SECONDS: ${AML_YENTE_TIMEOUT_SECONDS:-5}
+      AML_FINERACT_ENABLED: ${AML_FINERACT_ENABLED:-false}
+      AML_FINERACT_URL: ${AML_FINERACT_URL:-http://host.docker.internal:8443/fineract-provider/api/v1}
+      AML_FINERACT_USERNAME: ${AML_FINERACT_USERNAME:-mifos}
+      AML_FINERACT_PASSWORD: ${AML_FINERACT_PASSWORD:-password}
+      AML_FINERACT_TENANT: ${AML_FINERACT_TENANT:-default}
+      AML_FINERACT_TIMEOUT_SECONDS: ${AML_FINERACT_TIMEOUT_SECONDS:-5}
+    ports: ["${AML_BACKEND_HOST_PORT:-8080}:8080"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    volumes: ["aml-evidence:/app/data/evidence"]
+  frontend:
+    build: ./frontend
+    profiles: ["app"]
+    ports: ["${AML_FRONTEND_HOST_PORT:-5173}:80"]
+    depends_on: [backend]
+volumes:
+  aml-postgres:
+  aml-evidence:

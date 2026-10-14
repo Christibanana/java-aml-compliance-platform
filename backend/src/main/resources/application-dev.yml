@@ -1,0 +1,5 @@
+spring.config.activate.on-profile: dev
+aml.demo:
+  enabled: true
+  username: ${AML_DEMO_USERNAME:admin}
+  password: ${AML_DEMO_PASSWORD:ChangeMe123!}
