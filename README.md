@@ -75,7 +75,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\e2e-smoke.ps1
 
 样例 CSV：平台模板见 `integrations/amlsim/sample-transactions.csv`，AMLSim 官方默认列样例见 `integrations/amlsim/official-transactions-sample.csv`；客户→账户→交易验收样例为 `integrations/amlsim/customer-account-transaction-demo.csv`。完整测试索引见 `docs/TEST_RESULTS.md`，本轮全项目验收见 `docs/deployment/full-validation-2026-10-14.md`，外部适配核验见 `docs/deployment/phase4c-external-integration-validation-2026-10-14.md`。
 
-## 教师验收与文档
+## 项目文档与验证材料
 
 - 全面源码审查：`docs/project-review.md` 与 `docs/audit/`
 - 最终交付清单：`docs/final-delivery-checklist.md`

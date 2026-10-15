@@ -7,7 +7,7 @@
 | 后端完整回归 | 便携 Microsoft OpenJDK 21 下 `mvn -B clean verify` | 通过 | 32 tests，0 failures/errors/skipped；BUILD SUCCESS，43.052 秒 |
 | 前端生产构建 | `npm run build` | 通过 | 2300 modules transformed，12.98 秒；ECharts 555.67 KB、Element Plus 917.22 KB 大块告警仍存在 |
 | 前端生产依赖审计 | `npm audit --omit=dev` | 通过 | 0 vulnerabilities |
-| LaTeX/PDF | 官方便携 Tectonic 0.17 编译并渲染抽检 | 通过 | 最终源文件重编译后：项目说明书 17 页、操作手册 17 页、部署手册 4 页；未发现替换字符 |
+| LaTeX/PDF | MiKTeX 26.5 XeLaTeX 双遍编译、文本解析与页面渲染抽检 | 通过 | 项目说明书 26 页、操作手册 24 页、部署手册 18 页；PDF 1.7、中文字体嵌入、替换字符 0、无 overfull/致命编译错误 |
 | Docker Compose 配置 | `docker compose config --quiet` | 通过 | 配置可解析 |
 | Docker 恢复 | Docker Desktop 重启失败后执行 `wsl --shutdown` 再启动 | 通过 | 初次日志为 `WSL_E_USER_VHD_ALREADY_ATTACHED`；未重置数据、未删除卷，恢复后 Server 29.8.2 |
 | 运行状态 | `docker compose --profile app up -d` 与 `ps` | 通过 | PostgreSQL 16.10 healthy，backend/frontend running |
@@ -17,6 +17,10 @@
 | 真实 Yente/Fineract | 未执行 | 未验证 | 目标服务未配置；仅适配器契约与失败路径已测试 |
 
 最终 E2E 使用 `SYNTHETIC_AND_SIMULATED` 数据：customer `c217769a-9abb-4efb-8f0f-75ed1c53c644`、transaction `e8eefa23-8dfd-4229-82b9-e61d93cc56eb`、alert `d717a75c-5a81-4464-8b88-0a40b271be7a`、case `1d1ea811-11e6-45c9-980c-dcadd5b8d7c5`。这些标识只用于本次验证，不是固定产品数据。
+
+LaTeX 复核补充：三份文档均以正式项目文档口径重写，清除了面向特定评审场景的措辞；抽查封面、目录、正文、表格、代码块、系统截图和末页均可正常渲染。Edge 无头模式不会加载内置 PDF 查看器，得到空白截图，不能用于判断文件有效性；实际显示入口改为 VS Code LaTeX Workshop/PDF 扩展，结构验证与渲染验证由 PyMuPDF 完成。
+
+版式复核补充：封面仅保留日期，正文页脚已移除版本文字；章号和章标题在同一行，均为 26 pt，并作为整体水平居中。章节小标题设置页底空间保护，自动检测未发现孤立标题；短表采用“标题与表格整体预留空间”策略，交付版中的表格均未跨页拆分。
 
 ## 全项目最终回归（2026-10-14）
 

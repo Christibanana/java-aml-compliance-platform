@@ -1,37 +1,61 @@
-\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage[a4paper,top=2.4cm,bottom=2.4cm,left=2.55cm,right=2.35cm,headheight=15pt]{geometry}
 \usepackage{graphicx}
-\usepackage{booktabs,longtable,array,tabularx}
+\usepackage{booktabs,longtable,array,tabularx,multirow}
 \usepackage{xcolor}
 \usepackage{hyperref}
 \usepackage{enumitem}
 \usepackage{fancyhdr}
 \usepackage{float}
 \usepackage{listings}
-\hypersetup{colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!65!black}
-\setlist{nosep,leftmargin=2em}
+\usepackage{caption}
+\usepackage{titlesec}
+\usepackage{needspace}
+\usepackage{etoolbox}
+\definecolor{AmlNavy}{HTML}{17365D}
+\definecolor{AmlBlue}{HTML}{2F75B5}
+\definecolor{AmlLight}{HTML}{EAF2F8}
+\definecolor{AmlGray}{HTML}{F5F6F7}
+\hypersetup{hidelinks,pdfcreator={XeLaTeX},pdfproducer={MiKTeX XeLaTeX}}
+\setlist{leftmargin=2em,itemsep=0.25em,topsep=0.35em}
 \setlength{\parindent}{2em}
-\setlength{\parskip}{0.35em}
-\sloppy
+\setlength{\parskip}{0.25em}
+\raggedbottom
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.28}
+\captionsetup{font=small,labelfont=bf,labelsep=quad}
+\titleformat{\chapter}[block]{\centering\Huge\bfseries\color{AmlNavy}}{第\chinese{chapter}章}{1em}{}
+\titlespacing*{\chapter}{0pt}{0.8cm}{1.5cm}
+\titleformat{\section}{\Large\bfseries\color{AmlNavy}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\large\bfseries\color{AmlBlue}}{\thesubsection}{0.6em}{}
+\pretocmd{\section}{\Needspace{12\baselineskip}}{}{}
+\pretocmd{\subsection}{\Needspace{8\baselineskip}}{}{}
+\newcommand{\docname}{项目文档}
+\newcommand{\setdocname}[1]{\renewcommand{\docname}{#1}}
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{Java AML 反洗钱合规管理平台}
-\fancyhead[R]{教学演示文档}
-\fancyfoot[C]{\thepage}
-\lstset{basicstyle=\ttfamily\small,breaklines=true,frame=single,columns=fullflexible}
+\fancyhead[L]{\small Java AML 反洗钱合规管理平台}
+\fancyhead[R]{\small \docname}
+\fancyfoot[C]{\small \thepage}
+\fancyfoot[R]{\small 2026 年 10 月}
+\fancypagestyle{plain}{\fancyhf{}\fancyhead[L]{\small Java AML 反洗钱合规管理平台}\fancyhead[R]{\small \docname}\fancyfoot[C]{\small \thepage}\fancyfoot[R]{\small 2026 年 10 月}}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,frame=single,rulecolor=\color{AmlBlue},backgroundcolor=\color{AmlGray},columns=fullflexible,showstringspaces=false,xleftmargin=0.5em,xrightmargin=0.5em,aboveskip=0.8em,belowskip=0.8em}
 \newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\statusok}{\textcolor{green!45!black}{\textbf{已完成}}}
+\newcommand{\statuspart}{\textcolor{orange!75!black}{\textbf{部分完成}}}
+\newcommand{\statusno}{\textcolor{red!65!black}{\textbf{未完成}}}
 \newcommand{\shot}[3]{%
   \begin{figure}[H]\centering
-  \includegraphics[width=#1\textwidth,height=0.72\textheight,keepaspectratio]{../figures/screenshots/#2}
-  \caption{#3（模拟/合成数据）}
+  \fcolorbox{AmlLight}{white}{\includegraphics[width=#1\textwidth,height=0.67\textheight,keepaspectratio]{../figures/screenshots/#2}}
+  \caption{#3（测试环境）}
   \end{figure}}
 \newcommand{\doccover}[2]{%
-  \begin{titlepage}\centering
-  \vspace*{4cm}
-  {\Huge\bfseries #1\par}
-  \vspace{1.2cm}
-  {\Large Java AML 反洗钱合规管理平台\par}
+  \begin{titlepage}\thispagestyle{empty}\centering
+  \vspace*{1.4cm}{\color{AmlNavy}\rule{\textwidth}{2.2pt}\par}
+  \vspace{2.2cm}{\fontsize{28pt}{38pt}\selectfont\bfseries\color{AmlNavy} #1\par}
+  \vspace{0.9cm}{\Large\color{AmlBlue} #2\par}
+  \vspace{1.4cm}{\large Java AML Compliance Management Platform\par}
   \vfill
-  {\large #2\par}
-  \vspace{0.6cm}
-  {\large 2026 年 10 月\par}
+  {\large 2026 年 10 月 15 日\par}
+  \vspace{1.5cm}{\color{AmlNavy}\rule{\textwidth}{2.2pt}\par}
   \end{titlepage}}
+\newcommand{\noticebox}[1]{\begin{center}\fcolorbox{AmlBlue}{AmlLight}{\parbox{0.91\textwidth}{#1}}\end{center}}

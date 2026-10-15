@@ -4,13 +4,14 @@
 
 ## 编译
 
-推荐使用 Tectonic 0.17 或带中文支持的 XeLaTeX。在三个文档子目录中分别执行：
+推荐使用 MiKTeX 26.5 提供的 XeLaTeX。在三个文档子目录中分别执行两次，以更新目录、页码和交叉引用：
 
 ```powershell
-tectonic main.tex
+xelatex -interaction=nonstopmode -halt-on-error main.tex
+xelatex -interaction=nonstopmode -halt-on-error main.tex
 ```
 
-文档通过 `../common-settings.tex` 共享版式，并相对引用截图。2026-10-14 的交付 PDF 使用官方便携 Tectonic 0.17 生成；宿主系统没有安装 `xelatex`/`latexmk`。
+文档通过 `../common-settings.tex` 共享 A4 版式，并相对引用截图。2026-10-15 的交付 PDF 使用 MiKTeX XeLaTeX 生成，中文字体已嵌入；VS Code 已安装 LaTeX Workshop，并配置为使用同一编译器。当前环境未安装 Perl，因此不采用依赖 Perl 的 `latexmk` 流程。
 
 ## 内容边界
 

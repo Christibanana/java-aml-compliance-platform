@@ -13,10 +13,12 @@
 - 仅停止 Docker 进程、执行 `wsl --shutdown` 并重新启动 Docker Desktop；未格式化、重置或删除任何卷。随后 Server 29.8.2、三容器、健康接口和完整 E2E 均恢复通过。
 - C 盘空间曾非常紧张；已将未被 Git 跟踪的 JDK 安装压缩包移动到 `D:\CodexTemp\java-aml-latex-20261014\preserved\`。归档后仍应释放磁盘空间并观察 Docker 数据盘。
 
-## DOC-001：LaTeX 使用便携 Tectonic 编译
+## DOC-001：LaTeX 编译与 PDF 显示环境
 
-- 状态：已解决交付，宿主工具链仍未安装
-- 宿主没有 `xelatex`/`latexmk`。本轮下载并校验官方便携 Tectonic 0.17，在临时目录编译三套源文件并生成 PDF；便携编译器及缓存未纳入仓库。
+- 状态：已解决
+- 已安装并更新至 MiKTeX 26.5，XeLaTeX 双遍编译三套源文件成功；LaTeX Workshop 10.19.0 已配置为使用该编译器，MiKTeX 目录已加入用户 PATH。
+- 三份 PDF 均可被 PyMuPDF 解析和渲染，中文字体已嵌入且无替换字符。Edge 无头模式不加载内置 PDF 查看器，因此其空白截图不代表 PDF 损坏；VS Code 标签页查看器作为当前环境的主要显示方式。
+- `latexmk` 可执行文件存在，但当前环境没有 Perl，故文档构建使用两次 `xelatex`，不把 `latexmk` 作为已验证路径。
 
 ## INTEGRATION-003：外部服务未在本机运行
 

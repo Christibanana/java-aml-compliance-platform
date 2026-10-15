@@ -1,49 +1,206 @@
-\documentclass[UTF8,zihao=-4]{ctexart}
+\documentclass[UTF8,openany,zihao=-4]{ctexrep}
 \input{../common-settings.tex}
+\setdocname{系统部署手册}
 \begin{document}
-\doccover{Java AML 反洗钱系统部署手册}{本地教学环境}
+\doccover{Java AML 反洗钱合规管理平台}{系统部署与运维手册}
+\pagenumbering{Roman}
+\chapter*{文档说明}
+\addcontentsline{toc}{chapter}{文档说明}
+本手册说明系统在 Windows + Docker Desktop 环境中的配置、构建、部署、验证、备份和故障处理。命令默认在项目根目录执行。涉及密码、密钥、目标外部服务和数据卷的操作，应遵循所在环境的安全与变更管理要求。
 \tableofcontents
+\clearpage
+\pagenumbering{arabic}
 
-\section{部署范围与前提}
-推荐使用 Docker Desktop 和 Docker Compose 运行 PostgreSQL、Spring Boot 后端与 Nginx 前端。源码单独运行需要 JDK 21、Maven 3.9+、Node.js/npm 和 PostgreSQL 16。系统是教学环境，不含生产级 TLS、密钥托管、高可用、对象存储或集中监控。
+\chapter{部署架构与环境要求}
+\Needspace{0.62\textheight}
+\section{容器组成}
+\begin{longtable}{p{0.18\textwidth}p{0.26\textwidth}p{0.38\textwidth}}
+\toprule 服务 & 默认宿主端口 & 职责 \\ \midrule
+postgres & 5432 & PostgreSQL 16.10、业务数据和 Flyway 历史 \\
+backend & 8080 & Spring Boot API、规则引擎、迁移和健康检查 \\
+frontend & 5173 & Nginx、Vue 静态资源、SPA fallback 和 API 代理 \\
+\bottomrule
+\end{longtable}
+PostgreSQL 数据和案件证据分别使用命名卷持久化。执行普通 \code{docker compose down} 不会删除卷；添加 \code{-v} 会删除数据，应视为破坏性操作。
 
-\section{配置环境变量}
-在项目根目录复制 \code{.env.example} 为 \code{.env}。至少替换数据库密码、长度足够的随机 JWT 密钥和演示账号密码。真实部署禁止启用开发默认凭据。Yente 与 Fineract 默认关闭；只有目标服务、网络、凭据和许可均确认后才能启用。
+\Needspace{0.62\textheight}
+\section{软件要求}
+{\small
+\renewcommand{\arraystretch}{1.08}
+\begin{longtable}{p{0.24\textwidth}p{0.24\textwidth}p{0.34\textwidth}}
+\toprule 软件 & 已验证版本 & 用途 \\ \midrule
+Docker Desktop & Docker 29.8.2、Compose 5.6.0 & 推荐的完整部署方式 \\
+Java & JDK 21 & 后端本机构建和调试 \\
+Maven & 3.9+ & 后端依赖与测试 \\
+Node.js/npm & Node 24.15、npm 11.12 & 前端安装与构建 \\
+PostgreSQL & 16.10 & 非容器运行时的数据库 \\
+MiKTeX/XeLaTeX & MiKTeX 26.5 & 项目文档编译 \\
+\bottomrule
+\end{longtable}
+}
 
-\section{Compose 启动}
+\chapter{配置管理}
+\section{创建本地环境文件}
+复制 \code{.env.example} 为 \code{.env}。\code{.env} 已在 Git 忽略规则中，不应提交。至少替换数据库密码、JWT 密钥和账号密码。
+\begin{lstlisting}
+Copy-Item .env.example .env
+\end{lstlisting}
+
+\Needspace{0.62\textheight}
+\section{关键变量}
+\begin{longtable}{p{0.31\textwidth}p{0.19\textwidth}p{0.34\textwidth}}
+\toprule 变量 & 默认/示例 & 说明 \\ \midrule
+\texttt{AML\_DB\_NAME}、\newline\texttt{AML\_DB\_USER} & aml & 数据库名与账号 \\
+\texttt{AML\_DB\_PASSWORD} & 占位值 & 必须替换，不应进入版本库 \\
+\texttt{AML\_JWT\_SECRET} & 占位值 & 至少 32 个随机字节 \\
+\texttt{AML\_DEMO\_USERNAME}、\newline\texttt{AML\_DEMO\_PASSWORD} & 本地示例 & 共享环境必须替换 \\
+\texttt{AML\_POSTGRES\_HOST\_PORT} & 5432 & PostgreSQL 宿主端口 \\
+\texttt{AML\_BACKEND\_HOST\_PORT} & 8080 & 后端宿主端口 \\
+\texttt{AML\_FRONTEND\_HOST\_PORT} & 5173 & 前端宿主端口 \\
+\texttt{AML\_SCREENING\_PROVIDER} & MOCK & 默认筛查 Provider \\
+\texttt{AML\_YENTE\_*} & 默认禁用 & Yente URL、数据集、API Key、阈值、超时 \\
+\texttt{AML\_FINERACT\_*} & 默认禁用 & Fineract URL、账号、租户和超时 \\
+\bottomrule
+\end{longtable}
+
+\section{配置安全}
+不得把真实密码、令牌或 API Key 写入 \code{application.yml}、截图或提交记录。生产环境应使用平台密钥管理服务，并对配置读取权限、轮换周期和审计责任作出明确规定。
+
+\chapter{Docker Compose 部署}
+\section{配置检查与构建}
 \begin{lstlisting}
 docker compose config --quiet
-docker compose --profile app up -d --build
-docker compose --profile app ps
+docker compose --profile app build backend frontend
 \end{lstlisting}
-等待 PostgreSQL healthy 和后端启动后访问：前端 \url{http://localhost:5173}，健康接口 \url{http://localhost:8080/actuator/health}，OpenAPI \url{http://localhost:8080/swagger-ui.html}。
+配置检查失败时先修正 YAML 或环境变量。镜像构建会执行后端 Maven 测试和前端生产构建；首次构建需要访问 Maven 和 npm 仓库。
 
-停止服务可执行 \code{docker compose --profile app down}。除非明确需要清除全部本地业务数据，不要添加 \code{-v}；删除命名卷不可恢复。
+\section{启动与状态检查}
+\begin{lstlisting}
+docker compose --profile app up -d
+docker compose --profile app ps
+docker compose logs --tail 100 postgres backend frontend
+\end{lstlisting}
+等待 PostgreSQL 显示 healthy，随后检查：
+\begin{lstlisting}
+Invoke-RestMethod http://localhost:8080/actuator/health
+Invoke-WebRequest http://localhost:8080/v3/api-docs
+Invoke-WebRequest http://localhost:5173
+\end{lstlisting}
 
-\section{数据库迁移}
-后端启动时 Flyway 自动按顺序执行 V1--V6，Hibernate 随后以 validate 模式校验结构。不得使用 Hibernate 自动建表或手工修改生产结构。空库验证已在 PostgreSQL 16.10 上通过，共得到 34 张应用表、49 个外键和 81 个索引，另含 Flyway 历史表。
+\section{停止与重启}
+\enlargethispage{2\baselineskip}
+\begin{lstlisting}
+docker compose --profile app stop
+docker compose --profile app start
+# 保留命名卷并移除容器
+docker compose --profile app down
+\end{lstlisting}
+不要在未备份且未确认目标环境的情况下执行带 \code{-v} 的 down、volume rm 或 Docker Desktop 数据重置。
 
-\section{源码构建与验证}
+\chapter{数据库迁移}
+\section{迁移机制}
+后端启动时 Flyway 自动执行 \code{backend/src/main/resources/db/migration} 下的 V1--V6，之后 Hibernate 以 validate 模式核对实体和数据库结构。禁止使用 Hibernate 自动建表替代 Flyway，也不应直接修改已经执行的迁移文件。
+
+\section{迁移验证}
+\begin{lstlisting}
+docker compose exec postgres psql -U aml -d aml \
+  -c "select installed_rank, version, description, success \
+      from flyway_schema_history order by installed_rank;"
+\end{lstlisting}
+预期 V1--V6 全部 success=true。若迁移失败，应保留日志和数据库现场，修复新迁移或配置后重试；不要直接删除历史表掩盖问题。
+
+\section{结构原则}
+金额使用 \code{numeric(19,4)}，时间使用 \code{timestamptz}，业务主键主要为 UUID。唯一约束覆盖外部交易编号、规则命中键和命中对应预警，以保证导入与告警幂等。
+
+\chapter{源码构建与本地运行}
+\section{后端}
+确保 \code{JAVA_HOME} 指向 JDK 21：
 \begin{lstlisting}
 cd backend
 mvn -B clean verify
-cd ..\frontend
+$env:SPRING_PROFILES_ACTIVE='dev'
+mvn spring-boot:run
+\end{lstlisting}
+
+\section{前端}
+\begin{lstlisting}
+cd frontend
 npm ci
 npm run build
-npm audit --omit=dev
-cd ..
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\e2e-smoke.ps1
+npm run dev
 \end{lstlisting}
-2026-10-15 最终验证结果：后端 32 个测试全部通过；前端构建成功，生产依赖审计为 0 漏洞；PostgreSQL healthy，后端 health 为 UP，OpenAPI 与前端均返回 200；E2E 最终案件为 CLOSED，规则重复执行新增命中为 0。
+开发服务器默认访问后端 8080。生产构建输出位于 \code{frontend/dist}，该目录不提交版本库。
 
-\section{故障排查}
-若 Docker Desktop 报 WSL 数据盘仍附加，可先停止 Docker Desktop，执行 \code{wsl --shutdown} 后重启。本次验证以此方式恢复且没有重置或删除数据卷。若持续出现 I/O 错误，应先备份并释放宿主磁盘空间，再由操作者决定是否修复 Docker 数据盘，不能直接执行破坏性重置。
+\section{文档编译}
+MiKTeX 26.5 与 LaTeX Workshop 已用于 Windows 环境。三个文档分别在对应目录执行：
+\begin{lstlisting}
+xelatex -interaction=nonstopmode -halt-on-error main.tex  # execute twice
+\end{lstlisting}
 
-端口冲突时通过 \code{AML_POSTGRES_HOST_PORT}、\code{AML_BACKEND_HOST_PORT}、\code{AML_FRONTEND_HOST_PORT} 覆盖宿主端口。外部服务不可用时保持 Yente/Fineract 关闭，本地客户、交易、规则、预警、案件、Mock 筛查和报表仍可运行。
+\chapter{运行验证}
+\section{健康与接口}
+后端健康响应应包含 \code{"status":"UP"}，OpenAPI 返回 JSON，前端根路径返回 200。Nginx 应能代理 \code{/api/} 和 \code{/actuator/}。
 
-\section{安全与备份}
-共享环境必须替换所有占位凭据、限制数据库和 API 网络暴露、配置 TLS、备份 PostgreSQL 命名卷与案件证据卷，并验证恢复流程。证据文件当前没有病毒扫描；不要上传未知或真实敏感文件。审计和业务历史应按保留策略归档，避免物理删除。
+\section{端到端检查}
+\begin{lstlisting}
+powershell -NoProfile -ExecutionPolicy Bypass \
+  -File .\scripts\e2e-smoke.ps1
+\end{lstlisting}
+脚本验证登录、客户、账户、交易、Mock 筛查、规则、预警、案件关闭、评分、仪表盘、审计和 CSV。成功输出 \code{result=PASS}，且重复规则执行新增命中应为 0。
 
-\section{交付边界}
-真实 Yente/Fineract 未联调；R004--R008、复杂图规则、正式监管报送等未实现。项目尚无 LICENSE/NOTICE，公开发布前由所有者选择许可。完整测试证据见 \code{docs/TEST_RESULTS.md}，部署问题见 \code{docs/ISSUES.md}，最终清单见 \code{docs/final-delivery-checklist.md}。
+\section{已验证结果}
+最终回归中后端 32 个测试全部通过，前端构建成功，npm 生产依赖审计为 0 漏洞；PostgreSQL 16.10 空库完成 V1--V6；Compose 三服务正常；HTTP E2E 最终案件状态为 CLOSED。
+
+\chapter{外部系统配置}
+\section{Yente}
+启用前配置 URL、数据集、ApiKey、阈值和超时。先调用 Provider 状态接口确认 available=true，再使用非敏感测试主体验证匹配。真实服务失败应保持 FAILED，不允许改为 Mock 成功结果。
+
+\section{Fineract}
+配置 API 基址、Basic Auth 用户名密码、tenant 和超时。当前只支持指定储蓄账户交易的只读导入；客户、贷款和全量增量同步不在当前范围。
+
+\section{AMLSim}
+AMLSim 通过离线 CSV 导入，不需要常驻服务。平台兼容默认交易列，不包含 AMLSim 账户文件、图文件或模型运行过程。导入数据始终标记为模拟来源。
+
+\chapter{备份与恢复}
+\section{数据库备份}
+在确认目标路径和权限后执行逻辑备份：
+\begin{lstlisting}
+docker compose exec -T postgres pg_dump -U aml -d aml -Fc \
+  > aml-backup.dump
+\end{lstlisting}
+备份文件可能包含敏感业务数据，应加密存储、限制访问并记录保留期限。
+
+\section{证据文件备份}
+案件证据位于独立命名卷。应在应用写入停止或采用一致性快照机制时备份，并同时保留数据库元数据；单独复制文件无法恢复完整案件证据关系。
+
+\section{恢复原则}
+恢复必须在隔离环境演练。先确认数据库版本、迁移版本和备份时间，再恢复数据库及证据卷，最后启动后端执行 schema validation 和端到端抽查。未经审批不要覆盖现有运行数据。
+
+\chapter{故障排查}
+\begin{longtable}{p{0.24\textwidth}p{0.30\textwidth}p{0.32\textwidth}}
+\toprule 现象 & 检查项 & 处理建议 \\ \midrule
+PostgreSQL unhealthy & 端口、密码、卷、磁盘空间 & 查看 postgres 日志，修正配置后重启 \\
+后端启动失败 & Flyway、JDK、数据库连接 & 检查 backend 日志与迁移历史 \\
+前端 502/空白 & backend 状态、Nginx 代理、静态文件 & 检查三服务状态并重新构建前端 \\
+端口被占用 & 5432/8080/5173 & 使用 AML\_*\_HOST\_PORT 覆盖宿主端口 \\
+Docker WSL 异常 & VHD 附加、I/O、磁盘空间 & 停止 Docker，执行 \code{wsl --shutdown} 后重启；先备份，禁止直接重置 \\
+Maven/npm 下载失败 & 网络、代理、仓库可用性 & 保留缓存并重试，不修改不可信镜像源 \\
+Yente/Fineract 失败 & 开关、URL、凭据、tenant、超时 & 保持本地模式可运行，记录外部失败 \\
+PDF 无法预览 & PDF 关联、LaTeX Workshop、XeLaTeX 输出 & 使用 MiKTeX XeLaTeX 重编译并用 Edge/独立解析器验证 \\
+\bottomrule
+\end{longtable}
+
+\chapter{安全与运维检查清单}
+\begin{itemize}
+\item 替换全部占位密码与 JWT 密钥，禁用不需要的开发账号和 profile。
+\item 通过防火墙或反向代理限制数据库与应用端口，生产入口启用 TLS。
+\item 定期备份 PostgreSQL 和证据卷，并在隔离环境执行恢复演练。
+\item 对证据文件增加大小、类型、病毒扫描和对象存储策略。
+\item 监控磁盘、数据库连接、HTTP 错误、规则失败和外部服务延迟。
+\item 定期审计角色权限、外部凭据、依赖漏洞和日志保留策略。
+\item 升级数据库或应用前先验证 Flyway、回滚方案和数据兼容性。
+\end{itemize}
+
+\chapter{当前部署边界}
+Compose 配置适用于本地或受控单机环境，backend/frontend 尚未配置原生 Compose healthcheck。系统没有内置 TLS、高可用、集中日志、自动备份、病毒扫描和生产密钥托管。Yente/Fineract 真实服务未联调，R004--R008 等高级规则未实现。在进入正式业务环境前，应完成安全评审、容量测试、灾备设计、真实集成验证和监管要求映射。
 \end{document}

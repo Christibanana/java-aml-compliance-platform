@@ -1,111 +1,212 @@
 \documentclass[UTF8,openany,zihao=-4]{ctexrep}
 \input{../common-settings.tex}
-\title{Java AML 反洗钱系统项目说明书}
-\author{课程教学演示文档}
-\date{2026 年 10 月 14 日}
+\setdocname{项目说明书}
 \begin{document}
-\doccover{Java AML 反洗钱系统项目说明书}{项目教学演示文档}
+\doccover{Java AML 反洗钱合规管理平台}{项目说明书}
+\pagenumbering{Roman}
+\chapter*{文档说明}
+\addcontentsline{toc}{chapter}{文档说明}
+本文档基于项目源码、Flyway 迁移、接口定义和实际测试结果编制，系统说明以当前仓库实现为准。页面和业务记录来自测试环境，不包含真实客户、账户或金融交易数据。规则阈值、筛查结果和风险评分用于软件功能验证，不构成监管判断或业务决策。
+
+\begin{longtable}{p{0.18\textwidth}p{0.68\textwidth}}
+\toprule 项目 & 内容 \\ \midrule
+系统名称 & Java AML 反洗钱合规管理平台 \\
+系统形态 & 前后端分离的模块化单体应用 \\
+核心目标 & 建立客户、账户、交易、规则命中、预警和案件之间可追溯的业务链路 \\
+主要读者 & 项目负责人、开发人员、测试人员、部署运维人员和业务使用人员 \\
+证据来源 & 源码、数据库迁移、OpenAPI、自动化测试、真实 PostgreSQL 和 HTTP 端到端验证 \\
+\bottomrule
+\end{longtable}
 \tableofcontents
+\clearpage
+\pagenumbering{arabic}
 
 \chapter{项目概述}
-\section{背景与用途}
-本项目是面向课程实验、教师验收和源码学习的反洗钱合规管理平台。系统围绕客户、账户和交易建立可追溯的业务链路，通过规则识别异常交易并生成预警，随后支持案件调查、名单筛查、风险评分、统计报表和审计查询。
+\section{建设背景}
+反洗钱系统需要在客户主数据、账户关系和交易流水的基础上识别异常行为，并将监控结果转化为可调查、可复核、可审计的业务记录。本项目实现了一套完整的 AML 基础工作流：交易数据进入平台后，由规则引擎按时间窗口统计并生成命中，命中进一步形成预警，分析人员可将预警升级为案件并完成调查闭环。
 
-系统中的阈值、规则和评分模型均为教学示例，不构成法律、监管或真实授信结论。运行截图和端到端测试只使用合成或模拟数据。
+系统同时提供名单筛查、风险评分、统计仪表盘、CSV 报表与审计查询，并通过适配器隔离 AMLSim、Apache Fineract 和 OpenSanctions/Yente 等外部系统。外部服务不可用时，核心业务仍可独立运行。
 
-\section{实际技术栈}
-\begin{longtable}{p{0.22\textwidth}p{0.68\textwidth}}
-\toprule 层次 & 实际采用技术 \\ \midrule
-后端 & Java 21、Spring Boot 3.5.7、Spring Security、JWT、JPA/Hibernate、JdbcTemplate \\
-数据库 & PostgreSQL 16.10、Flyway 11.7.2，迁移版本 V1--V6 \\
-规则与接口 & Drools/KIE 10.1.0、Jakarta Validation、springdoc-openapi 2.8.13 \\
-前端 & Vue 3.5、TypeScript 5.9、Vite 7.3、Element Plus、Pinia、Axios、ECharts \\
-部署与测试 & Docker Compose、Nginx、JUnit 5、Mockito、MockMvc、H2 PostgreSQL 模式与真实 PostgreSQL E2E \\
+\section{建设目标}
+\begin{enumerate}
+\item 形成客户、账户和交易的统一数据基础，并保证关键关系和来源可追溯。
+\item 使用版本化规则执行大额、高频和累计交易监控，记录执行批次与规则命中。
+\item 建立预警审核、案件分派、调查笔记、证据管理、状态流转和关闭机制。
+\item 对真实外部数据与模拟数据进行显式区分，避免测试结果被误认为真实合规结论。
+\item 通过权限、参数校验、审计日志和数据库约束保障关键操作的完整性。
+\item 提供可重复部署、可自动测试、可从源码追溯的工程化交付物。
+\end{enumerate}
+
+\Needspace{0.62\textheight}
+\section{范围与边界}
+\begin{longtable}{p{0.22\textwidth}p{0.31\textwidth}p{0.31\textwidth}}
+\toprule 领域 & 当前范围 & 边界说明 \\ \midrule
+核心业务 & 客户、账户、交易、规则、预警、案件 & 主链路已完成运行验证 \\
+筛查评分 & Mock/Yente 适配、人工复核、客户和交易评分 & Yente 未连接真实服务；评分为固定规则模型 \\
+统计审计 & 仪表盘、四类业务 CSV、审计查询和导出 & 未实现正式监管报送生命周期 \\
+外部集成 & AMLSim CSV、Fineract 流水 API、Yente Match API & AMLSim 为离线导入；Fineract/Yente 未实连 \\
+高级能力 & R004--R008、复杂关系图、行为基线 & 仅保留规划元数据或未实现 \\
 \bottomrule
 \end{longtable}
 
-\section{真实功能范围}
-已实现登录鉴权、客户、账户、交易查询和 CSV 导入、R001--R003 三类监控规则、预警管理、案件调查、Mock 名单筛查及人工复核、客户/交易风险评分、数据库实时仪表盘、CSV 导出和审计查询。主链路“客户→账户→交易→规则→预警→案件→关闭”已经真实 HTTP 和 PostgreSQL 验证。
+\chapter{需求分析}
+\section{业务角色}
+系统以 RBAC 模型控制访问。当前数据库初始化包含管理员、合规分析、案件调查、审计和只读类角色，并通过权限关联表分配客户读取、交易导入、规则执行、预警审核、案件调查、筛查执行、报表读取和审计读取等权限。前端根据权限隐藏不可用菜单，后端方法级鉴权是最终安全边界。
 
-尚未实现完整 KYC 编辑工作流、用户角色后台、R004--R008 算法、复杂图/循环转账规则、正式监管报送生命周期。Yente 和 Fineract 只有适配器、契约测试与失败处理，没有真实目标系统联调。
+\Needspace{0.62\textheight}
+\section{核心功能需求}
+\begin{longtable}{p{0.14\textwidth}p{0.31\textwidth}p{0.39\textwidth}}
+\toprule 编号 & 功能 & 关键要求 \\ \midrule
+FR-01 & 身份认证与授权 & BCrypt 密码、JWT、后端权限校验、会话失效处理 \\
+FR-02 & 客户与账户 & 客户维护、账户关联、状态约束、分页与条件查询 \\
+FR-03 & 交易数据 & CSV/AMLSim 导入、字段校验、批次记录、来源与外部编号去重 \\
+FR-04 & 规则监控 & 规则版本、参数校验、时间窗口统计、执行记录和幂等命中 \\
+FR-05 & 预警处置 & 自动生成、分页详情、分派、状态流转和历史记录 \\
+FR-06 & 案件调查 & 预警升级、分派、笔记、证据、状态机、关闭结论 \\
+FR-07 & 筛查评分 & Provider 抽象、人工复核、来源标识、评分快照与历史 \\
+FR-08 & 统计审计 & 实时数据库统计、CSV 导出、审计筛选与权限隔离 \\
+\bottomrule
+\end{longtable}
 
-\chapter{系统架构}
-\section{总体结构}
-系统为前后端分离的模块化单体。浏览器访问 Vue 单页应用，Nginx 代理后端 API；Spring Boot 完成认证、业务和数据访问；PostgreSQL 保存业务历史与审计数据。Yente、Fineract 位于可选集成边界，默认关闭，外部不可用时本地功能仍可运行。
+\section{非功能需求}
+数据库结构仅由 Flyway 演进，金额使用高精度数值，时间以 UTC 持久化；写操作记录审计，状态变更遵循状态机；外部 HTTP 调用具备超时和明确失败处理；敏感配置来自环境变量；生产环境不得使用开发默认凭据。当前实现为单机容器化部署，不包含高可用、集中日志、生产密钥托管和自动灾备。
 
-后端源代码根目录为 \code{backend/src/main/java/com/example/aml}，按照 auth、security、customer、account、transaction、rule、alert、casework、screening、risk、dashboard、audit 和 integration 等领域组织。
+\chapter{总体架构}
+\Needspace{0.62\textheight}
+\section{技术架构}
+\begin{longtable}{p{0.20\textwidth}p{0.66\textwidth}}
+\toprule 层次 & 技术实现 \\ \midrule
+表示层 & Vue 3.5、TypeScript 5.9、Element Plus、ECharts、Pinia、Vue Router \\
+接入层 & Nginx 静态资源服务、SPA fallback、\code{/api} 与 \code{/actuator} 反向代理 \\
+应用层 & Java 21、Spring Boot 3.5.7、Spring MVC、Jakarta Validation \\
+安全层 & Spring Security 6.5.6、JWT 0.12.6、BCrypt、\code{@PreAuthorize} \\
+领域与规则 & 模块化业务服务、Drools/KIE 10.1.0、确定性风险评分 \\
+数据层 & Spring Data JPA、Hibernate 6.6.33、JdbcTemplate、PostgreSQL 16.10 \\
+迁移与部署 & Flyway 11.7.2、Docker Compose、Nginx 1.29 Alpine \\
+测试 & JUnit 5、Mockito、MockMvc、H2 PostgreSQL 模式、真实 PostgreSQL E2E \\
+\bottomrule
+\end{longtable}
 
-\section{核心业务关系}
-客户可以关联账户，账户承载交易；规则引擎按时间窗口查询交易并产生规则命中，命中生成预警；预警可以升级为案件，案件记录分派、笔记、证据、状态历史和关闭结论。筛查、风险评分和审计记录从侧面补充业务证据。
+\noticebox{浏览器／Vue SPA $\rightarrow$ Nginx $\rightarrow$ Spring Boot 模块化单体 $\rightarrow$ PostgreSQL；Yente 与 Fineract 通过适配器作为可选外部边界。}
 
-\chapter{主要功能}
-\section{登录与权限}
-登录接口校验 BCrypt 密码并签发 JWT，后端使用 Spring Security 和方法权限控制接口。前端菜单按权限过滤，但权限最终由后端执行。已知缺陷是失败登录计数和失败审计会随事务回滚，不能将账户锁定描述为验证通过。
-\shot{0.88}{01-login.png}{系统登录页，密码保持遮蔽}
+\section{模块划分}
+后端源码位于 \code{backend/src/main/java/com/example/aml}。\code{auth/security/user} 负责认证授权；\code{customer/account/transaction} 负责基础数据；\code{rule/alert/casework} 构成监控处置主链路；\code{screening/risk} 负责名单筛查和风险评分；\code{dashboard/audit} 提供统计、报表和审计；\code{integration} 隔离外部系统协议。
 
+\section{关键设计原则}
+\begin{itemize}
+\item 采用模块化单体，降低部署复杂度，同时保持领域边界清晰。
+\item 规则参数采用受控模板和白名单，不执行用户提交的任意 DRL。
+\item 规则命中键和预警关联使用唯一约束实现数据库级幂等。
+\item 真实、模拟和混合数据来源沿筛查与评分结果传播。
+\item 案件证据逻辑删除，历史和审计记录不做业务物理删除。
+\end{itemize}
+
+\chapter{核心业务设计}
 \section{客户、账户与交易}
-客户模块支持分页查询、新增、编辑和停用；账户模块支持客户关联、查询和状态管理；交易模块支持查询、平台 CSV 与 AMLSim 默认列 CSV 导入、字段校验和来源外部标识去重。Fineract 适配仅覆盖储蓄账户流水读取，当前未配置真实服务。
-\shot{0.96}{03-customers.png}{客户管理页}
-\shot{0.96}{04-accounts.png}{账户管理页}
-\shot{0.96}{05-transactions.png}{交易查询与导入页}
+客户是平台的主体对象，账户通过关联表与客户建立关系，交易归属于账户。交易导入先创建批次，再逐行完成表头、字段、金额、时间、币种、账户状态和唯一编号校验；成功、重复和拒绝数量分别记录。\code{source + external_id} 构成跨批次幂等边界。
+\shot{0.94}{03-customers.png}{客户管理}
+\shot{0.94}{04-accounts.png}{账户管理}
+\shot{0.94}{05-transactions.png}{交易查询与数据导入}
 
-\section{交易监控规则与预警}
-数据库保存规则元数据、版本、执行记录和命中记录。Drools 10.1.0 执行 R001 单笔大额、R002 短时高频和 R003 窗口累计交易。确定性命中标识与数据库约束共同避免同一窗口重复生成命中和预警。R004--R008 仅为禁用的规划记录。
-\shot{0.96}{06-rules.png}{交易监控规则页}
-\shot{0.96}{07-alerts.png}{预警查询与处置页}
+\section{规则执行与预警生成}
+规则库保存定义、版本和参数。执行请求指定规则及时间窗口，服务查询窗口内交易并构造 Drools 事实对象。当前启用 R001 单笔大额、R002 短时间高频、R003 窗口累计金额。命中保存参与交易，随后按规则命中生成预警；相同命中键再次执行不会重复写入。
+\shot{0.94}{06-rules.png}{监控规则、版本与执行记录}
+\shot{0.94}{07-alerts.png}{风险预警查询与处置}
 
-\section{案件调查}
-预警可升级为案件。案件支持调查员分派、调查笔记、证据上传/下载/逻辑移除、SHA-256、状态历史和关闭结论。状态机限制为 OPEN→INVESTIGATING→PENDING\_REVIEW→CLOSED，并允许复核退回。证据保存在本地 Docker 卷，未实现病毒扫描和对象存储。
-\shot{0.96}{08-cases.png}{案件调查工作台}
+\section{案件调查闭环}
+预警升级案件在同一事务中建立案件与预警关系。案件支持调查员分派、笔记、证据文件元数据及 SHA-256、状态历史和关闭结论。状态依次为 OPEN、INVESTIGATING、PENDING\_REVIEW 和 CLOSED，复核阶段可退回调查；关闭后禁止继续分派、添加笔记和修改证据。
+\shot{0.94}{08-cases.png}{案件调查工作台}
 
 \section{名单筛查与风险评分}
-ScreeningProvider 抽象提供 Mock 和 Yente 两种适配器。Mock 结果明确标记为 SIMULATED；Yente 支持超时、非 2xx 和畸形响应处理，真实服务失败不会被伪装为“未命中”。风险评分保留当前快照和只追加历史，属于确定性的教学模型。
-\shot{0.96}{09-screening.png}{名单筛查与人工复核页}
-\shot{0.96}{10-risk-scores.png}{客户与交易风险评分页}
+\code{ScreeningProvider} 定义统一筛查端口。Mock Provider 返回明确的 SIMULATED 数据；Yente 适配器实现请求映射、ApiKey、阈值、超时及失败处理。人工复核记录候选结论和复核人。客户与交易评分分别维护当前快照和只追加历史，并保存模型版本、因素解释和数据来源。
+\shot{0.94}{09-screening.png}{名单筛查与人工复核}
+\shot{0.94}{10-risk-scores.png}{风险评分与评分历史}
 
-\section{仪表盘、报表和审计}
-仪表盘通过后端实时查询 PostgreSQL，显示客户风险分布、预警趋势、规则命中、案件状态和优先级统计，不使用前端写死值。系统支持多类 UTF-8 CSV 即时导出。审计页支持筛选、分页和导出；登录失败审计缺陷必须同时披露。
-\shot{0.96}{02-dashboard.png}{AML 统计仪表盘}
-\shot{0.96}{11-audit.png}{审计查询页}
+\section{统计、报表与审计}
+仪表盘通过 JdbcTemplate 聚合真实业务表，提供客户风险分布、预警趋势、规则命中和案件统计。报表服务即时输出带 UTF-8 BOM 的 CSV，并中和可能触发电子表格公式的单元格。审计接口按操作者、动作、资源、结果和时间查询，并与业务报表采用独立权限。
+\shot{0.94}{02-dashboard.png}{AML 综合统计仪表盘}
+\shot{0.94}{11-audit.png}{审计日志查询}
 
-\chapter{数据库设计}
-\section{迁移和约束}
-数据库结构仅通过 Flyway V1--V6 演进，Hibernate 使用 schema validation。独立空库验证得到 34 张应用表、49 个外键和 81 个索引，另有 Flyway 历史表。主键通常为 UUID，金额使用 numeric(19,4)，时间使用 timestamptz。
+\chapter{数据设计}
+\section{迁移策略}
+数据库使用 PostgreSQL 16.10，结构由 Flyway V1--V6 管理，Hibernate 设置为 \code{ddl-auto=validate}。独立空库迁移验证得到 34 张应用表、49 个外键和 81 个索引，另有 \code{flyway_schema_history}。金额字段使用 \code{numeric(19,4)}，时间字段使用 \code{timestamptz}，主要实体使用 UUID 主键。
 
-\begin{longtable}{p{0.2\textwidth}p{0.7\textwidth}}
-\toprule 领域 & 主要表 \\ \midrule
-RBAC & sys\_user、sys\_role、sys\_permission 及关联表 \\
-客户账户 & aml\_customer、aml\_account、aml\_account\_customer \\
+\Needspace{0.62\textheight}
+\section{数据域与主要表}
+\begin{longtable}{p{0.18\textwidth}p{0.70\textwidth}}
+\toprule 数据域 & 主要表 \\ \midrule
+权限与审计 & sys\_user、sys\_role、sys\_permission、sys\_user\_role、sys\_role\_permission、sys\_audit\_log \\
+客户与账户 & aml\_customer、aml\_customer\_kyc、aml\_account、aml\_account\_customer \\
 交易 & aml\_transaction、aml\_transaction\_import\_batch \\
-规则预警 & aml\_rule*、aml\_rule\_hit*、aml\_alert* \\
+规则与预警 & aml\_rule、aml\_rule\_version、aml\_rule\_execution、aml\_rule\_hit、aml\_alert 及关联历史表 \\
 案件 & aml\_case、aml\_case\_alert、aml\_case\_note、aml\_case\_evidence、aml\_case\_history \\
-筛查评分 & aml\_screening*、aml\_customer\_risk*、aml\_transaction\_risk* \\
-审计 & sys\_audit\_log \\
+筛查与评分 & aml\_screening\_*、aml\_customer\_risk\_*、aml\_transaction\_risk\_* \\
+报表占位 & aml\_report、aml\_report\_generation；当前即时 CSV 不使用这两张表 \\
 \bottomrule
 \end{longtable}
 
-\chapter{部署与验收}
-\section{本地运行}
-主机需具备 Docker Desktop；也可分别安装 JDK 21、Maven、Node.js 和 PostgreSQL。复制 \code{.env.example} 为未跟踪的 \code{.env} 并替换数据库密码、JWT 密钥和演示密码。完整启动命令为：
-\begin{lstlisting}
-docker compose --profile app up -d --build
-\end{lstlisting}
-前端地址为 \url{http://localhost:5173}，OpenAPI 为 \url{http://localhost:8080/swagger-ui.html}，健康检查为 \url{http://localhost:8080/actuator/health}。
+\section{完整性与可追溯性}
+外键保证客户、账户、交易、命中、预警和案件之间的引用完整性；业务唯一键防止重复导入和重复告警；风险历史与案件历史采用追加式记录；证据文件本体存储在独立卷，数据库保存路径、摘要和逻辑移除信息。系统没有实现审计日志签名或防篡改存储，该能力属于后续安全增强范围。
 
-\section{真实测试结果}
-\begin{longtable}{p{0.22\textwidth}p{0.55\textwidth}p{0.09\textwidth}}
-\toprule 项目 & 实际结果 & 状态 \\ \midrule
-后端测试 & JDK 21 执行 Maven clean verify，32 tests，0 failures/errors/skipped & 通过 \\
-前端构建 & vue-tsc 与 Vite 成功，2300 modules & 通过 \\
-数据库迁移 & 独立 PostgreSQL 执行 V1--V6，schema validation 成功 & 通过 \\
-Compose/HTTP & 三容器运行，健康、OpenAPI 和前端均正常 & 通过 \\
-核心 E2E & 客户到账户、交易、规则、预警、案件关闭、评分、统计、审计和 CSV & 通过 \\
-真实外部系统 & Yente、Fineract 未配置；只通过适配器契约测试 & 未实连 \\
+\chapter{接口与安全设计}
+\section{接口概况}
+OpenAPI 实测包含 48 个路径、53 个操作，业务基础路径为 \code{/api}。登录以外的接口需要 Bearer JWT。主要资源包括 \code{/customers}、\code{/accounts}、\code{/transactions}、\code{/rules}、\code{/alerts}、\code{/cases}、\code{/screenings}、\code{/risk-scores}、\code{/dashboard}、\code{/reports} 和 \code{/audit-logs}。
+
+\section{安全控制}
+\begin{itemize}
+\item 密码使用 BCrypt 哈希，JWT 密钥和数据库凭据通过环境变量注入。
+\item 关键入口使用权限表达式，前端菜单隐藏不作为安全边界。
+\item DTO 使用 Jakarta Validation，业务服务再次校验状态、归属关系和状态机。
+\item 外部服务禁用、超时、非 2xx 和坏响应均显式失败，不自动伪造成功结果。
+\item CSV 输出对公式注入字符进行中和，证据文件计算 SHA-256。
+\end{itemize}
+
+\section{已知安全问题}
+错误密码路径中的失败次数和失败审计与登录事务共同回滚，导致账户锁定未实际生效，且错误口令返回 400 而非更合适的 401。该问题已经复现和记录，当前文档不将失败锁定列为已验证能力。生产部署还需要 TLS、密钥托管、病毒扫描、集中日志、备份恢复和最小权限数据库账号。
+
+\chapter{外部系统集成}
+\begin{longtable}{p{0.18\textwidth}p{0.31\textwidth}p{0.34\textwidth}}
+\toprule 系统 & 已实现内容 & 验证状态 \\ \midrule
+IBM AMLSim & 官方默认交易列 CSV 解析、来源标记、重复识别 & 本地 PostgreSQL 导入通过；未运行 AMLSim 生成器 \\
+Apache Fineract & 储蓄账户交易只读 API、Basic Auth、tenant、超时和幂等导入 & 本地 Stub 契约通过；真实服务未连接 \\
+OpenSanctions / Yente & Match API、ApiKey、阈值、超时、失败持久化 & 本地 Stub 契约通过；真实数据集未连接 \\
+\bottomrule
+\end{longtable}
+外部系统许可证和数据许可分别记录。AMLSim、Fineract 和 Yente 软件许可证不等同于 OpenSanctions 数据许可；实际使用数据前仍需核对相应数据集条款。
+
+\chapter{测试与质量保证}
+\section{测试策略}
+后端测试覆盖 JWT、客户、账户、交易导入、AMLSim、Fineract 契约、Drools、规则参数、预警状态、案件状态机、证据、Mock/Yente、筛查失败、CSV 安全、应用启动和核心闭环。H2 PostgreSQL 模式用于快速集成测试，真实 PostgreSQL 空库迁移和 HTTP E2E 用于补足方言与运行环境差异。
+
+\Needspace{0.62\textheight}
+\section{最终验证结果}
+\begin{longtable}{p{0.22\textwidth}p{0.53\textwidth}p{0.10\textwidth}}
+\toprule 范围 & 实际结果 & 结论 \\ \midrule
+后端测试 & JDK 21，\code{mvn -B clean verify}，32 tests，0 failures/errors/skipped & 通过 \\
+前端构建 & vue-tsc 与 Vite，2300 modules transformed & 通过 \\
+依赖审计 & npm 生产依赖审计，0 vulnerabilities & 通过 \\
+数据库迁移 & PostgreSQL 16.10 空库执行 V1--V6，schema validation 成功 & 通过 \\
+运行检查 & PostgreSQL healthy，后端 health UP，OpenAPI 200，前端 200 & 通过 \\
+端到端流程 & 客户→账户→交易→规则→预警→案件关闭；重复规则命中为 0 & 通过 \\
+外部实连 & Yente/Fineract 目标服务未配置 & 未验证 \\
 \bottomrule
 \end{longtable}
 
-\chapter{结论与边界}
-本项目形成了可运行、可追溯的教学 AML 主链路，适合展示 Spring Boot、Vue 和 PostgreSQL 的业务建模、规则监控与审计设计。完整证据应从 \code{docs/project-review.md}、\code{docs/audit/}、数据库迁移、测试源码和 E2E 脚本交叉核对。
+\chapter{完成情况与演进计划}
+\begin{longtable}{p{0.28\textwidth}p{0.20\textwidth}p{0.38\textwidth}}
+\toprule 模块 & 状态 & 说明 \\ \midrule
+客户、账户、交易 & \statusok & 后端、前端、迁移、测试和 E2E 均具备 \\
+R001--R003 与预警 & \statusok & Drools、窗口统计、版本和幂等已验证 \\
+案件调查 & \statusok & 分派、笔记、证据、状态机和关闭已验证 \\
+Mock 筛查与风险评分 & \statusok & 人工复核、快照和历史已验证 \\
+真实 Yente/Fineract & \statuspart & 适配器契约通过，目标服务未实连 \\
+KYC、用户管理、监管报送 & \statuspart & 具有部分表或基础模型，缺完整业务功能 \\
+R004--R008 与图分析 & \statusno & 仅规划或未实现 \\
+\bottomrule
+\end{longtable}
 
-归档前仍需由所有者决定项目许可证，确认 GitHub 账号、仓库名和可见性。生产部署必须禁用演示默认凭据、使用强密钥并补齐 TLS、备份、病毒扫描和可观测性。
+优先修复失败登录事务问题和趋势统计时区边界；增加 PostgreSQL Testcontainers、前端组件/E2E 测试和 CI；为证据引入病毒扫描与对象存储；将分页响应改为稳定 DTO；补齐 KYC、用户管理、监管报送和高级规则；在获得目标地址、凭据和许可后执行 Yente/Fineract 真实联调。
+
+\chapter{结论}
+当前系统已经形成结构清晰、可运行、可测试的 AML 核心业务平台。其主要价值在于将基础主数据、交易监控、预警处置、案件调查、筛查评分、统计报表和审计记录连接为可追溯闭环，并以 Flyway、自动化测试、容器化部署和清晰的外部适配边界保证工程可维护性。系统仍存在明确的功能和安全边界，部署到真实业务环境前必须完成安全加固、真实外部系统联调和监管要求评估。
 \end{document}

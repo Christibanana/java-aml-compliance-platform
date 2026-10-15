@@ -23,7 +23,7 @@
 - 容器构建使用 `maven:3.9.11-eclipse-temurin-21`，运行使用 Temurin 21 JRE；本次测试实际使用 Java 21。
 - Node.js v24.15.0、npm 11.12.1。
 - Docker Client/Server 29.8.2、Docker Compose v5.6.0。
-- `latexmk`、XeLaTeX、pdfLaTeX、LuaLaTeX、BibTeX、Biber 均未安装；最终整理阶段改用经校验的官方便携 Tectonic 0.17 成功编译三份 PDF，编译器本身不纳入仓库。
+- 已安装 MiKTeX 26.5，XeLaTeX 4.18 可用；三份交付 PDF 已由 XeLaTeX 双遍编译并完成结构和渲染抽检。LaTeX Workshop 10.19.0 已配置；`latexmk` 因缺少 Perl 未作为验证路径。
 - 当前会话没有内置浏览器自动化执行接口；最终整理阶段使用本机 Edge 与临时 Puppeteer 控制实际 localhost 页面，取得 11 张截图并人工抽检。仓库仍没有前端自动化测试套件。
 
 ## 配置与运行方式
