@@ -1,0 +1,5 @@
+﻿externalId,accountNo,counterpartyAccount,direction,amount,currency,transactionTime,transactionType,description
+TX-CSV-1,ACC-CSV-1,,IN,100.25,USD,2026-10-14T10:00:00Z,TRANSFER,"first line
+second, ""quoted"" line"
+TX-CSV-1,ACC-CSV-1,,IN,100.25,USD,2026-10-14T10:00:00Z,TRANSFER,duplicate
+TX-CSV-2,ACC-CSV-1,,IN,invalid,USD,2026-10-14T10:00:00Z,TRANSFER,bad amount

@@ -3,8 +3,9 @@ package com.example.aml.transaction;
 import com.example.aml.account.*;
 import com.example.aml.audit.AuditService;
 import com.example.aml.transaction.dto.TransactionImportResult;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
@@ -24,16 +25,17 @@ public class AmlSimImportService {
     private final TransactionImportBatchRepository batches;
     private final AccountRepository accounts;
     private final AuditService audit;
+    private final ImportChunkWriter writer;
 
     public AmlSimImportService(TransactionRepository transactions, TransactionImportBatchRepository batches,
-                               AccountRepository accounts, AuditService audit) {
+                               AccountRepository accounts, AuditService audit, ImportChunkWriter writer) {
         this.transactions = transactions;
         this.batches = batches;
         this.accounts = accounts;
         this.audit = audit;
+        this.writer = writer;
     }
 
-    @Transactional
     public TransactionImportResult importCsv(MultipartFile file, String currency) throws IOException {
         validateFile(file);
         String normalizedCurrency = Objects.requireNonNullElse(currency, "USD").trim().toUpperCase(Locale.ROOT);
@@ -42,25 +44,23 @@ public class AmlSimImportService {
         TransactionImportBatch batch = batches.save(new TransactionImportBatch(batchNo(), SOURCE, fileName));
         int total = 0, imported = 0, duplicates = 0, rejected = 0;
         List<String> errors = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-            String headerLine = reader.readLine();
-            if (headerLine != null && headerLine.startsWith("\uFEFF")) headerLine = headerLine.substring(1);
-            List<String> header = headerLine == null ? List.of() : TransactionImportService.parseCsvLine(headerLine);
+        List<ImportChunkWriter.Pending> pending = new ArrayList<>(100);
+        Set<String> seen = new HashSet<>();
+        try (CSVParser parser = CsvInput.open(file)) {
+            Iterator<CSVRecord> records = parser.iterator();
+            List<String> header = records.hasNext() ? records.next().toList() : List.of();
             Map<String, Integer> index = index(header);
             if (!index.keySet().containsAll(REQUIRED_COLUMNS)) {
                 throw new IllegalArgumentException("AMLSim CSV 缺少官方交易列：" + String.join(",", REQUIRED_COLUMNS));
             }
-            String line;
-            int lineNo = 1;
-            while ((line = reader.readLine()) != null) {
-                lineNo++;
-                if (line.isBlank()) continue;
+            while (records.hasNext()) {
+                CSVRecord record = records.next();
                 total++;
                 try {
-                    List<String> columns = TransactionImportService.parseCsvLine(line);
+                    List<String> columns = record.toList();
                     String transactionId = required(value(columns, index, "tran_id"), "tran_id", 80);
                     String externalId = "AMLSIM-" + transactionId;
-                    if (transactions.existsBySourceAndExternalId(SOURCE, externalId)) { duplicates++; continue; }
+                    if (seen.contains(externalId) || transactions.existsBySourceAndExternalId(SOURCE, externalId)) { duplicates++; continue; }
                     String origin = required(value(columns, index, "orig_acct"), "orig_acct", 100);
                     String beneficiary = required(value(columns, index, "bene_acct"), "bene_acct", 100);
                     Account account = accounts.findByAccountNo(origin).orElse(null);
@@ -78,17 +78,40 @@ public class AmlSimImportService {
                     String sar = required(value(columns, index, "is_sar"), "is_sar", 10);
                     String alertId = optional(value(columns, index, "alert_id"), 60, "alert_id");
                     String description = "AMLSim synthetic transaction; is_sar=" + sar + "; alert_id=" + Objects.requireNonNullElse(alertId, "");
-                    transactions.save(new AmlTransaction(externalId, account, counterparty, direction,
-                            parseAmount(value(columns, index, "base_amt")), normalizedCurrency,
-                            parseInstant(value(columns, index, "tran_timestamp")), type, SOURCE, description, batch));
-                    imported++;
+                    pending.add(new ImportChunkWriter.Pending(new AmlTransaction(externalId, account, counterparty,
+                            direction, parseAmount(value(columns, index, "base_amt")), normalizedCurrency,
+                            parseInstant(value(columns, index, "tran_timestamp")), type, SOURCE, description, batch),
+                            record.getRecordNumber()));
+                    seen.add(externalId);
                 } catch (RuntimeException exception) {
                     rejected++;
-                    if (errors.size() < 100) errors.add("第 " + lineNo + " 行：" + exception.getMessage());
+                    if (errors.size() < 100) errors.add("第 " + record.getRecordNumber() + " 条记录：" + exception.getMessage());
+                }
+                if (pending.size() == 100) {
+                    ImportChunkWriter.Outcome outcome = writer.save(List.copyOf(pending));
+                    imported += outcome.imported(); duplicates += outcome.duplicates(); rejected += outcome.rejected();
+                    appendErrors(errors, outcome.errors());
+                    pending.clear();
                 }
             }
+        } catch (IOException exception) {
+            batch.fail(total, imported, rejected + 1, "CSV 读取失败");
+            batches.save(batch);
+            throw exception;
+        } catch (IllegalArgumentException exception) {
+            batch.fail(exception.getMessage());
+            batches.save(batch);
+            throw exception;
+        } catch (RuntimeException exception) {
+            batch.fail(total, imported, rejected + 1, "CSV 导入中断：" + exception.getClass().getSimpleName());
+            batches.save(batch);
+            throw exception;
         }
+        ImportChunkWriter.Outcome finalOutcome = writer.save(pending);
+        imported += finalOutcome.imported(); duplicates += finalOutcome.duplicates(); rejected += finalOutcome.rejected();
+        appendErrors(errors, finalOutcome.errors());
         batch.complete(total, imported, rejected, errors.isEmpty() ? null : String.join("\n", errors));
+        batches.save(batch);
         audit.record("IMPORT", "TRANSACTION", batch.getId(), "SUCCESS",
                 Map.of("source", SOURCE, "dataMode", "SIMULATED", "file", fileName,
                         "imported", imported, "duplicates", duplicates, "rejected", rejected));
@@ -99,6 +122,9 @@ public class AmlSimImportService {
         Map<String, Integer> result = new LinkedHashMap<>();
         for (int i = 0; i < header.size(); i++) result.put(header.get(i).trim().toLowerCase(Locale.ROOT), i);
         return result;
+    }
+    private static void appendErrors(List<String> target, List<String> source) {
+        source.stream().limit(Math.max(0, 100 - target.size())).forEach(target::add);
     }
     private static String value(List<String> columns, Map<String, Integer> index, String name) {
         int position = index.get(name);

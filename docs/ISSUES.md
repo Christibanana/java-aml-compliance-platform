@@ -1,5 +1,10 @@
 # 问题与阻塞记录
 
+## v1.1.3 全量测试未通过（2026-10-23）
+
+- `mvn -B test` 执行 40 个测试，0 断言失败、4 个错误，全部来自上一轮未提交的 `AuthPostgresIntegrationTest` 静态容器初始化；Testcontainers 报 `Could not find a valid Docker environment`，尽管本机 `docker info` 可读。尚未解决该环境适配问题，不将认证测试或全量回归标为通过。
+- 排除该类的 `mvn -B -Dtest=*,!AuthPostgresIntegrationTest test` 为 36/36 通过；本轮 CSV/规则定向 9/9 通过。尚无 PostgreSQL 专项吞吐量测量。
+
 ## ARCHIVE-001：GitHub 远程归档等待确认
 
 - 状态：待人工处理

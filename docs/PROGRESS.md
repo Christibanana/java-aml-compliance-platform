@@ -1,5 +1,7 @@
 # 开发进度
 
+2026-10-23 v1.1.3：CSV 逻辑记录解析、100 条分块提交、R001–R003 查询边界和规则 FAILED 执行记录已完成代码与定向验证。36 个非认证测试通过；完整 40 测试中的 4 个认证 Testcontainers 环境错误仍待处理。认证修复保留在工作区，未纳入本次提交。
+
 ## Phase 4C 外部项目核验与适配（2026-10-14）
 
 - 已核验 IBM AMLSim、Apache Fineract、OpenSanctions/yente 官方仓库及许可证：AMLSim/Fineract 为 Apache-2.0，yente 软件为 MIT；OpenSanctions 数据许可与 yente 软件许可分开处理。

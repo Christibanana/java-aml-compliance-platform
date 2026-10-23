@@ -3,8 +3,10 @@ package com.example.aml.transaction;
 import com.example.aml.account.*;
 import com.example.aml.audit.AuditService;
 import com.example.aml.transaction.dto.TransactionImportResult;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.*;
 import java.math.BigDecimal;
@@ -21,16 +23,17 @@ public class TransactionImportService {
     private final TransactionImportBatchRepository batches;
     private final AccountRepository accounts;
     private final AuditService audit;
+    private final ImportChunkWriter writer;
 
     public TransactionImportService(TransactionRepository transactions, TransactionImportBatchRepository batches,
-                                    AccountRepository accounts, AuditService audit) {
+                                    AccountRepository accounts, AuditService audit, ImportChunkWriter writer) {
         this.transactions = transactions;
         this.batches = batches;
         this.accounts = accounts;
         this.audit = audit;
+        this.writer = writer;
     }
 
-    @Transactional
     public TransactionImportResult importCsv(MultipartFile file) throws IOException {
         validateFile(file);
         String fileName = Objects.requireNonNullElse(file.getOriginalFilename(), "transactions.csv");
@@ -39,21 +42,21 @@ public class TransactionImportService {
                 SOURCE, fileName));
         int total = 0, imported = 0, duplicates = 0, rejected = 0;
         List<String> errors = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-            String header = reader.readLine();
-            if (header != null && header.startsWith("\uFEFF")) header = header.substring(1);
-            if (!HEADER.equals(header)) throw new IllegalArgumentException("CSV 表头不符合模板");
-            String line;
-            int lineNo = 1;
-            while ((line = reader.readLine()) != null) {
-                lineNo++;
-                if (line.isBlank()) continue;
+        List<ImportChunkWriter.Pending> pending = new ArrayList<>(100);
+        Set<String> seen = new HashSet<>();
+        try (CSVParser parser = CsvInput.open(file)) {
+            Iterator<CSVRecord> records = parser.iterator();
+            if (!records.hasNext() || !HEADER.equals(String.join(",", records.next().values()))) {
+                throw new IllegalArgumentException("CSV 表头不符合模板");
+            }
+            while (records.hasNext()) {
+                CSVRecord record = records.next();
                 total++;
                 try {
-                    List<String> columns = parseCsvLine(line);
+                    List<String> columns = record.toList();
                     if (columns.size() != 9) throw new IllegalArgumentException("字段数应为 9");
                     String externalId = required(columns.get(0), "外部流水号", 100);
-                    if (transactions.existsBySourceAndExternalId(SOURCE, externalId)) {
+                    if (seen.contains(externalId) || transactions.existsBySourceAndExternalId(SOURCE, externalId)) {
                         duplicates++;
                         continue;
                     }
@@ -70,16 +73,39 @@ public class TransactionImportService {
                     String transactionType = required(columns.get(7), "交易类型", 30);
                     String counterparty = optional(columns.get(2), 100, "对手方账号");
                     String description = optional(columns.get(8), 500, "描述");
-                    transactions.save(new AmlTransaction(externalId, account, counterparty, direction, amount,
-                            currency, transactionTime, transactionType, SOURCE, description, batch));
-                    imported++;
+                    pending.add(new ImportChunkWriter.Pending(new AmlTransaction(externalId, account, counterparty,
+                            direction, amount, currency, transactionTime, transactionType, SOURCE, description, batch),
+                            record.getRecordNumber()));
+                    seen.add(externalId);
                 } catch (RuntimeException exception) {
                     rejected++;
-                    if (errors.size() < 100) errors.add("第 " + lineNo + " 行：" + exception.getMessage());
+                    if (errors.size() < 100) errors.add("第 " + record.getRecordNumber() + " 条记录：" + exception.getMessage());
+                }
+                if (pending.size() == 100) {
+                    ImportChunkWriter.Outcome outcome = writer.save(List.copyOf(pending));
+                    imported += outcome.imported(); duplicates += outcome.duplicates(); rejected += outcome.rejected();
+                    appendErrors(errors, outcome.errors());
+                    pending.clear();
                 }
             }
+        } catch (IOException exception) {
+            batch.fail(total, imported, rejected + 1, "CSV 读取失败");
+            batches.save(batch);
+            throw exception;
+        } catch (IllegalArgumentException exception) {
+            batch.fail(exception.getMessage());
+            batches.save(batch);
+            throw exception;
+        } catch (RuntimeException exception) {
+            batch.fail(total, imported, rejected + 1, "CSV 导入中断：" + exception.getClass().getSimpleName());
+            batches.save(batch);
+            throw exception;
         }
+        ImportChunkWriter.Outcome finalOutcome = writer.save(pending);
+        imported += finalOutcome.imported(); duplicates += finalOutcome.duplicates(); rejected += finalOutcome.rejected();
+        appendErrors(errors, finalOutcome.errors());
         batch.complete(total, imported, rejected, errors.isEmpty() ? null : String.join("\n", errors));
+        batches.save(batch);
         audit.record("IMPORT", "TRANSACTION", batch.getId(), "SUCCESS",
                 Map.of("file", fileName, "imported", imported, "duplicates", duplicates, "rejected", rejected));
         return new TransactionImportResult(batch.getId(), batch.getBatchNo(), total, imported,
@@ -96,24 +122,15 @@ public class TransactionImportService {
     }
 
     static List<String> parseCsvLine(String line) {
-        List<String> values = new ArrayList<>();
-        StringBuilder value = new StringBuilder();
-        boolean quoted = false;
-        for (int index = 0; index < line.length(); index++) {
-            char character = line.charAt(index);
-            if (character == '"') {
-                if (quoted && index + 1 < line.length() && line.charAt(index + 1) == '"') {
-                    value.append('"');
-                    index++;
-                } else quoted = !quoted;
-            } else if (character == ',' && !quoted) {
-                values.add(value.toString().trim());
-                value.setLength(0);
-            } else value.append(character);
+        try (CSVParser parser = CSVParser.parse(line, CSVFormat.DEFAULT)) {
+            return parser.iterator().next().toList();
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("CSV 格式错误", exception);
         }
-        if (quoted) throw new IllegalArgumentException("引号未闭合");
-        values.add(value.toString().trim());
-        return values;
+    }
+
+    private static void appendErrors(List<String> target, List<String> source) {
+        source.stream().limit(Math.max(0, 100 - target.size())).forEach(target::add);
     }
 
     private static String required(String value, String label, int max) {

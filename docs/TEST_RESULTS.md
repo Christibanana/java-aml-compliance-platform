@@ -1,5 +1,9 @@
 # 测试结果
 
+## 2026-10-23 v1.1.3 增量验证
+
+JDK 21 下 `mvn -B -DskipTests compile` 成功；CSV、规则和核心闭环定向测试 9/9 通过；排除上一轮未提交的认证 PostgreSQL 测试后，`mvn -B -Dtest=*,!AuthPostgresIntegrationTest test` 为 36/36 通过。完整 `mvn -B test` 执行 40 个测试、0 断言失败、4 个环境错误：`AuthPostgresIntegrationTest` 的 Testcontainers 未发现可用 Docker 环境。详见 `docs/optimization/transaction-rule-optimization.md`；不将完整回归标为通过。
+
 ## 最终交付复核（2026-10-15）
 
 | 范围 | 命令/方式 | 结果 | 真实结论 |

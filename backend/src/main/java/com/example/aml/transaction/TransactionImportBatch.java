@@ -39,6 +39,16 @@ public class TransactionImportBatch extends BaseEntity {
         errorDetails = details;
         status = errors == 0 ? Status.COMPLETED : Status.COMPLETED_WITH_ERRORS;
     }
+    public void fail(String details) {
+        errorDetails = details;
+        status = Status.FAILED;
+    }
+    public void fail(int total, int success, int errors, String details) {
+        totalCount = total;
+        successCount = success;
+        errorCount = errors;
+        fail(details);
+    }
     public String getBatchNo() { return batchNo; }
     public Status getStatus() { return status; }
 }

@@ -5,7 +5,8 @@ import com.example.aml.rule.dto.ExecuteRulesRequest;
 import com.fasterxml.jackson.databind.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
@@ -20,12 +21,17 @@ public class RuleExecutionService {
     private final ObjectMapper json;
     private final AuditService audit;
     private final DroolsRuleEvaluator drools;
+    private final RuleExecutionStateService state;
+    private final TransactionTemplate transaction;
 
-    public RuleExecutionService(JdbcTemplate jdbc, ObjectMapper json, AuditService audit, DroolsRuleEvaluator drools) {
+    public RuleExecutionService(JdbcTemplate jdbc, ObjectMapper json, AuditService audit, DroolsRuleEvaluator drools,
+                                RuleExecutionStateService state, PlatformTransactionManager manager) {
         this.jdbc = jdbc;
         this.json = json;
         this.audit = audit;
         this.drools = drools;
+        this.state = state;
+        this.transaction = new TransactionTemplate(manager);
     }
 
     public record RuleResult(String code, int version, int candidates, int newHits, int alerts) {}
@@ -35,7 +41,6 @@ public class RuleExecutionService {
                                   BigDecimal amount, Instant transactionTime) {}
     private record AccountCustomerKey(UUID accountId, UUID customerId) {}
 
-    @Transactional
     public Result execute(ExecuteRulesRequest request) {
         Instant asOf = request == null || request.asOf() == null ? Instant.now() : request.asOf();
         Set<String> requested = request == null || request.ruleCodes() == null || request.ruleCodes().isEmpty()
@@ -47,17 +52,30 @@ public class RuleExecutionService {
         if (configs.isEmpty()) throw new IllegalArgumentException("没有可执行的已启用规则");
         UUID executionId = UUID.randomUUID();
         Instant asOfWindowStart = earliestWindow(configs, asOf);
-        String scope = configs.stream().map(RuleConfig::code).sorted().collect(Collectors.joining(","));
-        jdbc.update("insert into aml_rule_execution(id,execution_key,scope,started_at,status,window_start,window_end) " +
-                        "values(?,?,?,?,?,?,?)", executionId, "RULE-RUN-" + UUID.randomUUID(), scope,
-                Timestamp.from(Instant.now()), "RUNNING", Timestamp.from(asOfWindowStart), Timestamp.from(asOf));
+        String scope = configs.stream().map(config -> config.code() + ":v" + config.version())
+                .sorted().collect(Collectors.joining(","));
+        state.start(executionId, scope, asOfWindowStart, asOf);
+        int[] progress = new int[2];
+        try {
+            Result result = transaction.execute(status -> run(executionId, asOf, configs, scope, progress));
+            state.complete(executionId, result.processed(), result.hits());
+            return result;
+        } catch (RuntimeException exception) {
+            state.fail(executionId, progress[0], 0, "RULE_EXECUTION_FAILED:" + exception.getClass().getSimpleName());
+            throw exception;
+        }
+    }
 
-        List<TransactionRow> allRows = loadTransactions(asOf);
+    private Result run(UUID executionId, Instant asOf, List<RuleConfig> configs, String scope, int[] progress) {
         List<RuleResult> results = new ArrayList<>();
         int totalHits = 0, totalAlerts = 0;
+        Set<UUID> processedIds = new HashSet<>();
         for (RuleConfig config : configs) {
             jdbc.queryForObject("select id from aml_rule where id=? for update", UUID.class, config.id());
-            List<RuleEvaluationFact> facts = buildFacts(config, allRows, asOf);
+            List<TransactionRow> rows = loadTransactions(config, asOf);
+            rows.forEach(row -> processedIds.add(row.transactionId()));
+            progress[0] = processedIds.size();
+            List<RuleEvaluationFact> facts = buildFacts(config, rows, asOf);
             drools.evaluate(facts);
             int newHits = 0, alerts = 0;
             for (RuleEvaluationFact fact : facts) {
@@ -73,9 +91,8 @@ public class RuleExecutionService {
             totalHits += newHits;
             totalAlerts += alerts;
         }
-        int processed = (int) allRows.stream().map(TransactionRow::transactionId).distinct().count();
-        jdbc.update("update aml_rule_execution set status='COMPLETED',finished_at=?,processed_count=?,hit_count=? where id=?",
-                Timestamp.from(Instant.now()), processed, totalHits, executionId);
+        int processed = processedIds.size();
+        progress[1] = totalHits;
         audit.record("EXECUTE", "RULE", executionId, "SUCCESS",
                 Map.of("rules", scope, "processed", processed, "newHits", totalHits));
         return new Result(executionId, processed, totalHits, totalAlerts,
@@ -98,13 +115,26 @@ public class RuleExecutionService {
                 }, requested.toArray());
     }
 
-    private List<TransactionRow> loadTransactions(Instant asOf) {
+    private List<TransactionRow> loadTransactions(RuleConfig config, Instant asOf) {
+        String filter;
+        Object bound;
+        if (config.code().equals("AML-R001")) {
+            filter = " and t.amount>=?";
+            bound = positiveDecimal(config.parameters(), "amountThreshold");
+        } else if (config.code().equals("AML-R002")) {
+            filter = " and t.transaction_time>=?";
+            bound = Timestamp.from(asOf.minus(Duration.ofMinutes(positiveInteger(config.parameters(), "windowMinutes"))));
+        } else {
+            filter = " and t.transaction_time>=?";
+            bound = Timestamp.from(asOf.minus(Duration.ofHours(positiveInteger(config.parameters(), "windowHours"))));
+        }
         return jdbc.query("select t.id,t.account_id,ac.customer_id,t.amount,t.transaction_time " +
                         "from aml_transaction t join aml_account_customer ac on ac.account_id=t.account_id " +
-                        "where t.status='COMPLETED' and t.transaction_time<=? order by t.transaction_time,t.id",
+                        "where t.status='COMPLETED' and t.transaction_time<=?" + filter +
+                        " order by t.transaction_time,t.id",
                 (rs, rowNum) -> new TransactionRow(rs.getObject("id", UUID.class),
                         rs.getObject("account_id", UUID.class), rs.getObject("customer_id", UUID.class),
-                        rs.getBigDecimal("amount"), rs.getTimestamp("transaction_time").toInstant()), Timestamp.from(asOf));
+                        rs.getBigDecimal("amount"), rs.getTimestamp("transaction_time").toInstant()), Timestamp.from(asOf), bound);
     }
 
     private List<RuleEvaluationFact> buildFacts(RuleConfig config, List<TransactionRow> rows, Instant asOf) {
