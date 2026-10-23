@@ -11,7 +11,7 @@ Content-Type: application/json
 {"username":"admin","password":"ChangeMe123!"}
 ```
 
-成功响应包含 `token/tokenType/displayName/roles/permissions`。连续失败会累计次数并临时锁定；生产部署不得使用演示口令。
+成功响应包含 `token/tokenType/displayName/roles/permissions`。既有设计为连续失败 5 次锁定 15 分钟，到期自动放行、成功登录重置计数。旧版失败事务回滚已确认；当前工作区独立事务修复与统一 401 响应尚未通过 PostgreSQL 集成测试，不可作为已验收 API 契约。生产部署不得使用演示口令。
 
 | 方法 | 路径 | 权限 | 状态 |
 |---|---|---|---|
@@ -84,7 +84,7 @@ CSV 表头固定为：`externalId,accountNo,counterpartyAccount,direction,amount
 
 交易导入响应包含 `batchId/batchNo/total/imported/duplicates/rejected/errors`。同一 `source + externalId` 的重复流水不会再次写入；最多返回前 100 条逐行错误。
 
-校验失败统一返回含 `timestamp/status/code/message/path/fields` 的 JSON；认证失败为 401，权限不足为 403。
+参数校验失败返回含 `timestamp/status/code/message/path/fields` 的 JSON；无令牌和无效令牌返回 401，权限不足返回 403。错误密码在 2026-10-15 历史基线中返回 400；当前工作区拟改为统一 `401 / INVALID_CREDENTIALS`，待 PostgreSQL 集成测试通过后确认。
 
 ## 名单筛查与风险评分
 

@@ -149,7 +149,7 @@ powershell -NoProfile -ExecutionPolicy Bypass \
 脚本验证登录、客户、账户、交易、Mock 筛查、规则、预警、案件关闭、评分、仪表盘、审计和 CSV。成功输出 \code{result=PASS}，且重复规则执行新增命中应为 0。
 
 \section{已验证结果}
-最终回归中后端 32 个测试全部通过，前端构建成功，npm 生产依赖审计为 0 漏洞；PostgreSQL 16.10 空库完成 V1--V6；Compose 三服务正常；HTTP E2E 最终案件状态为 CLOSED。
+2026-10-15 历史回归中后端 32 个测试全部通过，前端构建成功，npm 生产依赖审计为 0 漏洞；PostgreSQL 16.10 空库完成 V1--V6；Compose 三服务正常；HTTP E2E 最终案件状态为 CLOSED。这些数字不包含当前工作区新增的认证 PostgreSQL 测试；失败计数、锁定和失败审计修复尚未验收。发布前应运行完整后端测试及认证定向测试，并记录实际结果。
 
 \chapter{外部系统配置}
 \section{Yente}

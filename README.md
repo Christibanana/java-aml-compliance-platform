@@ -13,11 +13,14 @@
 - IBM AMLSim 官方默认交易 CSV 导入、Apache Fineract 储蓄账户交易只读 API 适配器；外部系统默认关闭且不影响本地运行。
 - Vue 3 后台页面、OpenAPI/Swagger、Flyway 全量初始结构、Compose。
 
+以上为 2026-10-15 历史验收基线。当前 `fix/auth-login-audit` 工作区存在未提交的认证修复代码和 PostgreSQL 集成测试，尚未完成测试，不将失败计数、锁定或失败审计列为已验证。
+
 ## 当前限制
 
 - AML-R004～R008 仅完成模型和参数，复杂图/循环转账算法未实现。
 - Yente 与 Fineract 适配器已由本地 HTTP stub 验证契约，AMLSim 默认 schema 已完成真实 PostgreSQL 导入；本机未运行 Yente/Fineract，因此不能宣称这两个外部服务实连成功。Fineract 客户/贷款/增量同步和 AMLSim 账户/图文件导入尚未实现。
 - 用户/角色维护、KYC 编辑、监管报表尚未完成；风险评分当前为固定版本的可解释教学规则模型；案件多预警手工并案、证据病毒扫描和对象存储留作后续扩展。
+- 历史版本错误密码导致失败计数与审计回滚；修复设计和待验收状态见 `docs/optimization/auth-issue-analysis.md`、`docs/manuals/06-用户权限模块任务手册.md`。
 - 基础工程、客户→账户→交易、三类规则→预警和案件调查均已完成真实 PostgreSQL/Flyway 与完整 Compose 验证。
 
 ## 本地启动
@@ -77,7 +80,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\e2e-smoke.ps1
 
 ## 项目文档与验证材料
 
-- 全面源码审查：`docs/project-review.md` 与 `docs/audit/`
+- 全面源码审查：`docs/audit/`，其中 `documentation-source-map.md` 对应文档与源码证据
 - 最终交付清单：`docs/final-delivery-checklist.md`
 - 项目说明书：`latex/output/01-项目说明书.pdf`
 - 系统操作手册：`latex/output/02-系统操作手册.pdf`

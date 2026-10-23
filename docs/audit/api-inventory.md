@@ -4,7 +4,7 @@
 
 | 领域 | 方法与路径 | 权限 | 状态/说明 |
 |---|---|---|---|
-| 登录 | `POST /auth/login` | 匿名 | 登录成功可用；失败计数/锁定存在已确认缺陷 |
+| 登录 | `POST /auth/login` | 匿名 | 历史成功登录已验证；旧版失败计数/锁定缺陷已确认，工作区修复待 PostgreSQL 验证 |
 | 客户 | `GET,POST /customers`；`GET,PUT /customers/{id}` | READ/WRITE | 已实现并验证 |
 | 账户 | `GET,POST /accounts`；`GET /accounts/{id}`；`PUT /accounts/{id}/status` | CUSTOMER_READ/ACCOUNT_WRITE | 已实现并验证 |
 | 交易 | `GET /transactions` | CUSTOMER_READ | 已实现并验证 |

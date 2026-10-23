@@ -3,7 +3,7 @@
 ## P0：归档阻断
 
 1. **GitHub 远程归档尚未执行。** 最终整理阶段会完成敏感信息检查与本地基线提交；远程仓库创建、可见性选择和推送必须等待用户确认。项目还没有 `LICENSE`/`NOTICE`。
-2. **登录失败锁定实际无效。** `AuthController.login` 在同一 `@Transactional` 方法中增加失败次数、写失败审计后抛出未检查异常，导致整个事务回滚。实测错误口令后 `failed_attempts=0`、FAILED LOGIN 审计=0；错误口令还返回 400 而非 401。下一阶段应拆分失败记录事务或调整回滚策略，并增加集成测试。
+2. **历史登录失败锁定无效，工作区修复待验收。** 旧版 `AuthController.login` 在同一 `@Transactional` 方法中增加失败次数、写失败审计后抛异常，导致事务回滚；实测错误口令后 `failed_attempts=0`、FAILED LOGIN 审计=0，HTTP 400。当前 `fix/auth-login-audit` 工作区已有独立事务和 PostgreSQL 测试代码，但尚无通过结果，不将锁定/审计标为已修复。
 
 ## P1：验收与安全问题
 

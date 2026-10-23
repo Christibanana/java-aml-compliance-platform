@@ -4,7 +4,7 @@
 
 | 功能/描述 | 后端源码 | 前端源码 | 数据库表 | API | 测试代码 | 状态 | 运行验证 | 问题 |
 |---|---|---|---|---|---|---|---|---|
-| JWT 登录与 RBAC：BCrypt、JWT、方法权限 | `auth/`、`security/`、`user/` | `LoginView.vue`、`stores/auth.ts`、`AppLayout.vue` | `sys_user/role/permission` 及连接表 | `POST /auth/login` | `JwtServiceTest`、`CoreWorkflowIntegrationTest` | 部分实现 | 正确登录、401/403 已验证 | 失败次数和失败审计会回滚，锁定无效；错误口令返回 400；无用户管理 UI/API |
+| JWT 登录与 RBAC：BCrypt、JWT、方法权限 | `auth/`、`security/`、`user/` | `LoginView.vue`、`stores/auth.ts`、`AppLayout.vue` | `sys_user/role/permission` 及连接表 | `POST /auth/login` | `JwtServiceTest`、`CoreWorkflowIntegrationTest`；新增 `AuthPostgresIntegrationTest` 待运行 | 部分实现 | 历史基线的正确登录、401/403 已验证；认证修复未验收 | 旧版错误口令导致失败次数和审计回滚；当前工作区已有独立事务修复代码，PostgreSQL 测试尚未通过；无用户管理 UI/API |
 | 客户管理：查询、新增、编辑、停用 | `customer/*` | `CustomersView.vue` | `aml_customer` | `/customers/**` | `CustomerServiceTest`、核心集成/E2E | 已实现且验证通过 | 单测、MockMvc、真实 HTTP | 无物理删除是设计；页面固定取最多 100 条，未做完整分页 UI |
 | KYC 管理 | 无 Service/Controller/DTO | 无 | `aml_customer_kyc` | 无 | 无 | 仅有设计或占位 | 未运行 | 只有表，无采集、审核、到期提醒或页面 |
 | 账户及客户关系：开户、筛选、冻结/关闭 | `account/*` | `AccountsView.vue` | `aml_account`、`aml_account_customer` | `/accounts/**` | `AccountServiceTest`、核心集成/E2E | 已实现且验证通过 | 单测、MockMvc、真实 HTTP | 页面固定取最多 100 条 |
@@ -26,8 +26,8 @@
 | AML 统计仪表盘 | `dashboard/DashboardService` | `DashboardView.vue` | 客户、交易、预警、案件、命中等 | `GET /dashboard` | 核心集成/E2E | 已实现且验证通过 | API、健康与前端构建通过 | 未完成浏览器视觉验证；按日趋势可能受 DB 会话时区影响 |
 | 即时 CSV 报表 | `ReportExportService`、`CsvCell` | 仪表盘导出 | 实时查询业务表 | `/reports/{type}/csv` | 核心集成、`CsvCellTest`、E2E | 已实现且验证通过 | 本次 CSV 1341 bytes | 仅四类内部 CSV，不是监管报文 |
 | 报表任务/产物生命周期 | 无业务 Service/Controller | 无独立报表页 | `aml_report`、`aml_report_generation` | 无 | 无 | 仅有设计或占位 | 未运行 | 两表没有实际调用 |
-| 审计查询与导出 | `audit/*` | `AuditView.vue` | `sys_audit_log` | `/audit-logs/**` | 核心集成/E2E | 部分实现 | 查询、权限、CSV 已验证 | 正常写操作覆盖较好，但错误登录审计实际回滚；没有防篡改存储/签名 |
-| 前端 SPA 与权限导航 | 后端权限为最终边界 | router/store/layout 和 11 页 | 无 | 调用上述 API | 只有构建；无前端测试 | 已实现但未验证 | vue-tsc/Vite、首页 HTTP 200 | 无浏览器点击/截图证据；路由守卫只看 token，细粒度主要靠菜单和后端 |
+| 审计查询与导出 | `audit/*` | `AuditView.vue` | `sys_audit_log` | `/audit-logs/**` | 核心集成/E2E；失败登录专项待运行 | 部分实现 | 历史基线的查询、权限、CSV 已验证 | 旧版错误登录审计回滚；工作区修复待 PostgreSQL 验证；无防篡改存储/签名 |
+| 前端 SPA 与权限导航 | 后端权限为最终边界 | router/store/layout 和 11 页 | 无 | 调用上述 API | 只有构建；无仓库内前端测试 | 已实现但未自动化验证 | vue-tsc/Vite、首页 HTTP 200；历史 Edge 实际页面截图 11 张 | 有一次性人工截图证据，无可重复浏览器点击测试；路由守卫只看 token，细粒度主要靠菜单和后端 |
 | Docker Compose 部署 | Dockerfile、配置 | Nginx | PostgreSQL + 两命名卷 | 健康/OpenAPI | Compose、迁移、E2E | 已实现且验证通过 | 三容器运行、健康 UP | backend/frontend 无 Compose healthcheck；配置是开发演示级 |
 
 ## 总体判定

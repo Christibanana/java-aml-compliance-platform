@@ -162,7 +162,7 @@ OpenAPI 实测包含 48 个路径、53 个操作，业务基础路径为 \code{/
 \end{itemize}
 
 \section{已知安全问题}
-错误密码路径中的失败次数和失败审计与登录事务共同回滚，导致账户锁定未实际生效，且错误口令返回 400 而非更合适的 401。该问题已经复现和记录，当前文档不将失败锁定列为已验证能力。生产部署还需要 TLS、密钥托管、病毒扫描、集中日志、备份恢复和最小权限数据库账号。
+2026-10-15 历史基线中，错误密码路径的失败次数和失败审计与登录事务共同回滚，锁定未实际生效，错误口令返回 400。当前工作区已编写独立事务、行级锁及统一 401 响应的修复代码，但 PostgreSQL Testcontainers 测试尚未完成，不将失败锁定和失败审计列为已验证能力。生产部署还需要 TLS、密钥托管、病毒扫描、集中日志、备份恢复和最小权限数据库账号。
 
 \chapter{外部系统集成}
 \begin{longtable}{p{0.18\textwidth}p{0.31\textwidth}p{0.34\textwidth}}
@@ -179,7 +179,7 @@ OpenSanctions / Yente & Match API、ApiKey、阈值、超时、失败持久化 &
 后端测试覆盖 JWT、客户、账户、交易导入、AMLSim、Fineract 契约、Drools、规则参数、预警状态、案件状态机、证据、Mock/Yente、筛查失败、CSV 安全、应用启动和核心闭环。H2 PostgreSQL 模式用于快速集成测试，真实 PostgreSQL 空库迁移和 HTTP E2E 用于补足方言与运行环境差异。
 
 \Needspace{0.62\textheight}
-\section{最终验证结果}
+\section{2026 年 10 月 15 日历史验证结果}
 \begin{longtable}{p{0.22\textwidth}p{0.53\textwidth}p{0.10\textwidth}}
 \toprule 范围 & 实际结果 & 结论 \\ \midrule
 后端测试 & JDK 21，\code{mvn -B clean verify}，32 tests，0 failures/errors/skipped & 通过 \\
@@ -205,7 +205,7 @@ R004--R008 与图分析 & \statusno & 仅规划或未实现 \\
 \bottomrule
 \end{longtable}
 
-优先修复失败登录事务问题和趋势统计时区边界；增加 PostgreSQL Testcontainers、前端组件/E2E 测试和 CI；为证据引入病毒扫描与对象存储；将分页响应改为稳定 DTO；补齐 KYC、用户管理、监管报送和高级规则；在获得目标地址、凭据和许可后执行 Yente/Fineract 真实联调。
+上述 32 个测试不包含当前工作区新增的认证 PostgreSQL 测试，不能据此认定登录失败修复已通过。优先完成失败登录修复的 PostgreSQL 事务与并发验收，并修复趋势统计时区边界；增加前端组件/E2E 测试和 CI；为证据引入病毒扫描与对象存储；将分页响应改为稳定 DTO；补齐 KYC、用户管理、监管报送和高级规则；在获得目标地址、凭据和许可后执行 Yente/Fineract 真实联调。
 
 \chapter{结论}
 当前系统已经形成结构清晰、可运行、可测试的 AML 核心业务平台。其主要价值在于将基础主数据、交易监控、预警处置、案件调查、筛查评分、统计报表和审计记录连接为可追溯闭环，并以 Flyway、自动化测试、容器化部署和清晰的外部适配边界保证工程可维护性。系统仍存在明确的功能和安全边界，部署到真实业务环境前必须完成安全加固、真实外部系统联调和监管要求评估。
