@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16.10-alpine
+    environment:
+      POSTGRES_DB: aml_frontend_e2e
+      POSTGRES_USER: aml_e2e
+      POSTGRES_PASSWORD: ${AML_E2E_DB_PASSWORD:?Set a disposable E2E database password}
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aml_e2e -d aml_frontend_e2e"]
+      interval: 2s
+      timeout: 2s
+      retries: 30

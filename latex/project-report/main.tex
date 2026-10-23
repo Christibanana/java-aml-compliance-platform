@@ -6,7 +6,7 @@
 \pagenumbering{Roman}
 \chapter*{文档说明}
 \addcontentsline{toc}{chapter}{文档说明}
-本文档基于项目源码、Flyway 迁移、接口定义和实际测试结果编制，系统说明以当前仓库实现为准。页面和业务记录来自测试环境，不包含真实客户、账户或金融交易数据。规则阈值、筛查结果和风险评分用于软件功能验证，不构成监管判断或业务决策。
+本文档基于项目源码、Flyway 迁移、接口定义和实际测试结果编制，增量状态截至 2026 年 10 月 23 日；历史验收与当前工作区结果分别列示。页面和业务记录来自测试环境，不包含真实客户、账户或金融交易数据。规则阈值、筛查结果和风险评分用于软件功能验证，不构成监管判断或业务决策。
 
 \begin{longtable}{p{0.18\textwidth}p{0.68\textwidth}}
 \toprule 项目 & 内容 \\ \midrule
@@ -41,7 +41,7 @@
 \section{范围与边界}
 \begin{longtable}{p{0.22\textwidth}p{0.31\textwidth}p{0.31\textwidth}}
 \toprule 领域 & 当前范围 & 边界说明 \\ \midrule
-核心业务 & 客户、账户、交易、规则、预警、案件 & 主链路已完成运行验证 \\
+核心业务 & 客户、账户、交易、规则、预警、案件 & R001 定向浏览器闭环通过；默认三规则联合执行存在已知故障 \\
 筛查评分 & Mock/Yente 适配、人工复核、客户和交易评分 & Yente 未连接真实服务；评分为固定规则模型 \\
 统计审计 & 仪表盘、四类业务 CSV、审计查询和导出 & 未实现正式监管报送生命周期 \\
 外部集成 & AMLSim CSV、Fineract 流水 API、Yente Match API & AMLSim 为离线导入；Fineract/Yente 未实连 \\
@@ -80,10 +80,10 @@ FR-08 & 统计审计 & 实时数据库统计、CSV 导出、审计筛选与权�
 接入层 & Nginx 静态资源服务、SPA fallback、\code{/api} 与 \code{/actuator} 反向代理 \\
 应用层 & Java 21、Spring Boot 3.5.7、Spring MVC、Jakarta Validation \\
 安全层 & Spring Security 6.5.6、JWT 0.12.6、BCrypt、\code{@PreAuthorize} \\
-领域与规则 & 模块化业务服务、Drools/KIE 10.1.0、确定性风险评分 \\
+领域与规则 & 模块化业务服务、Drools/KIE 10.1.0、Apache Commons CSV 1.14.1、确定性风险评分 \\
 数据层 & Spring Data JPA、Hibernate 6.6.33、JdbcTemplate、PostgreSQL 16.10 \\
 迁移与部署 & Flyway 11.7.2、Docker Compose、Nginx 1.29 Alpine \\
-测试 & JUnit 5、Mockito、MockMvc、H2 PostgreSQL 模式、真实 PostgreSQL E2E \\
+测试 & JUnit 5、Mockito、MockMvc、H2 PostgreSQL 模式、PostgreSQL、Playwright/Edge 浏览器 E2E \\
 \bottomrule
 \end{longtable}
 
@@ -103,15 +103,20 @@ FR-08 & 统计审计 & 实时数据库统计、CSV 导出、审计筛选与权�
 
 \chapter{核心业务设计}
 \section{客户、账户与交易}
-客户是平台的主体对象，账户通过关联表与客户建立关系，交易归属于账户。交易导入先创建批次，再逐行完成表头、字段、金额、时间、币种、账户状态和唯一编号校验；成功、重复和拒绝数量分别记录。\code{source + external_id} 构成跨批次幂等边界。
+客户是平台的主体对象，账户通过关联表与客户建立关系，交易归属于账户。平台及 AMLSim CSV 使用 UTF-8 流式解析，支持可选 BOM、引号、字段内逗号及换行、转义双引号和空字段。导入先创建批次，再按记录完成表头、金额、时间、币种、账户状态和编号校验；最多积累 100 条有效记录后独立提交，坏记录保留定位和错误计数，已提交块不会被后续坏记录整体回滚。\code{source + external_id} 唯一约束构成跨批次幂等边界。文件级错误会标记批次失败；尚未实现断点续传或吞吐性能基准。
 \shot{0.94}{03-customers.png}{客户管理}
 \shot{0.94}{04-accounts.png}{账户管理}
 \shot{0.94}{05-transactions.png}{交易查询与数据导入}
 
 \section{规则执行与预警生成}
-规则库保存定义、版本和参数。执行请求指定规则及时间窗口，服务查询窗口内交易并构造 Drools 事实对象。当前启用 R001 单笔大额、R002 短时间高频、R003 窗口累计金额。命中保存参与交易，随后按规则命中生成预警；相同命中键再次执行不会重复写入。
+规则库保存定义、版本和参数。后端执行接口可传规则代码和 \code{asOf}，当前网页上的“执行规则检测”按钮则默认请求所有已启用的 R001--R003，未提供时间输入。R001 在数据库按金额阈值筛选，仍覆盖截至执行时刻的历史交易；R002/R003 分别使用配置的分钟/小时窗口查询，再构造 Drools 事实对象。命中保存参与交易并生成预警，重复命中键不会重复写入。运行状态在独立事务中保存，业务事务失败后可保留 FAILED、处理数和非敏感错误类别。
+当前真实 PostgreSQL 浏览器测试发现：默认三规则联合执行时，版本范围字符串超过 \code{aml_rule_execution.scope} 的 \code{varchar(30)}，执行失败且不生成该次预警。该错误发生在执行记录插入阶段，本次不会留下 FAILED 行，需依据后端异常日志排查。隔离测试库中只启用 R001 后完成了导入、规则命中和预警详情闭环；这不等于默认联合执行已通过。修复需通过新的 Flyway 迁移扩大字段并补 PostgreSQL 回归测试，本轮文档更新不修改业务逻辑。
 \shot{0.94}{06-rules.png}{监控规则、版本与执行记录}
 \shot{0.94}{07-alerts.png}{风险预警查询与处置}
+\begin{figure}[H]\centering
+\fcolorbox{AmlLight}{white}{\includegraphics[width=0.94\textwidth,height=0.67\textheight,keepaspectratio]{../../docs/optimization/screenshots/frontend-e2e-r001-alert.png}}
+\caption{R001 单规则浏览器端到端验证的预警详情（合成数据）}
+\end{figure}
 
 \section{案件调查闭环}
 预警升级案件在同一事务中建立案件与预警关系。案件支持调查员分派、笔记、证据文件元数据及 SHA-256、状态历史和关闭结论。状态依次为 OPEN、INVESTIGATING、PENDING\_REVIEW 和 CLOSED，复核阶段可退回调查；关闭后禁止继续分派、添加笔记和修改证据。
@@ -176,7 +181,7 @@ OpenSanctions / Yente & Match API、ApiKey、阈值、超时、失败持久化 &
 
 \chapter{测试与质量保证}
 \section{测试策略}
-后端测试覆盖 JWT、客户、账户、交易导入、AMLSim、Fineract 契约、Drools、规则参数、预警状态、案件状态机、证据、Mock/Yente、筛查失败、CSV 安全、应用启动和核心闭环。H2 PostgreSQL 模式用于快速集成测试，真实 PostgreSQL 空库迁移和 HTTP E2E 用于补足方言与运行环境差异。
+后端测试覆盖 JWT、客户、账户、交易导入、AMLSim、Fineract 契约、Drools、规则参数、预警状态、案件状态机、证据、Mock/Yente、筛查失败、CSV 安全、应用启动和核心闭环。H2 PostgreSQL 模式用于快速集成测试，真实 PostgreSQL 用于迁移和运行差异验证。新增的 Playwright/Edge 测试使用独立临时数据库、随机合成编号和单工作进程，不触碰既有业务库；浏览器用例只覆盖指定的三条路径。
 
 \Needspace{0.62\textheight}
 \section{2026 年 10 月 15 日历史验证结果}
@@ -192,11 +197,25 @@ OpenSanctions / Yente & Match API、ApiKey、阈值、超时、失败持久化 &
 \bottomrule
 \end{longtable}
 
+\Needspace{0.48\textheight}
+\section{2026 年 10 月 23 日增量验证与限制}
+\begin{longtable}{p{0.22\textwidth}p{0.53\textwidth}p{0.10\textwidth}}
+\toprule 范围 & 实际结果 & 结论 \\ \midrule
+CSV/规则定向测试 & JDK 21 下 9/9 通过；覆盖多行 CSV、重复与分块、R001--R003 窗口边界、幂等和 FAILED 记录 & 通过 \\
+后端其余回归 & 排除未提交的认证 PostgreSQL 测试后 36/36 通过 & 有条件通过 \\
+后端完整测试 & \code{mvn -B test}：40 个用例、0 断言失败、4 个 Testcontainers 环境错误 & 未通过 \\
+前端构建 & \code{npm run build} 成功；仍有大 chunk 警告 & 通过 \\
+浏览器 E2E & 独立 PostgreSQL 与 Edge 下 3/3 通过，连续重复运行三次；含登录、客户账户、R001 预警 & 通过 \\
+默认三规则执行 & \code{scope} 超过 \code{varchar(30)}，PostgreSQL 拒绝写入 & 未通过 \\
+\bottomrule
+\end{longtable}
+浏览器测试的 R001 用例在隔离库中停用 R002/R003 后执行；登录成功与退出已验证，不代表错误密码计数、锁定或失败审计通过 PostgreSQL 验收。性能提升没有实际测量，不填写数值。
+
 \chapter{完成情况与演进计划}
 \begin{longtable}{p{0.28\textwidth}p{0.20\textwidth}p{0.38\textwidth}}
 \toprule 模块 & 状态 & 说明 \\ \midrule
 客户、账户、交易 & \statusok & 后端、前端、迁移、测试和 E2E 均具备 \\
-R001--R003 与预警 & \statusok & Drools、窗口统计、版本和幂等已验证 \\
+R001--R003 与预警 & \statuspart & 定向规则与 R001 预警通过；默认联合执行被字段长度阻断 \\
 案件调查 & \statusok & 分派、笔记、证据、状态机和关闭已验证 \\
 Mock 筛查与风险评分 & \statusok & 人工复核、快照和历史已验证 \\
 真实 Yente/Fineract & \statuspart & 适配器契约通过，目标服务未实连 \\
@@ -205,7 +224,7 @@ R004--R008 与图分析 & \statusno & 仅规划或未实现 \\
 \bottomrule
 \end{longtable}
 
-上述 32 个测试不包含当前工作区新增的认证 PostgreSQL 测试，不能据此认定登录失败修复已通过。优先完成失败登录修复的 PostgreSQL 事务与并发验收，并修复趋势统计时区边界；增加前端组件/E2E 测试和 CI；为证据引入病毒扫描与对象存储；将分页响应改为稳定 DTO；补齐 KYC、用户管理、监管报送和高级规则；在获得目标地址、凭据和许可后执行 Yente/Fineract 真实联调。
+历史 32 个测试及本轮浏览器登录成功用例均不包含失败登录的 PostgreSQL 事务与并发验收。优先修复规则执行范围字段容量、完成认证集成测试并恢复全量回归；随后验证趋势统计时区边界，扩展浏览器兼容性与 CI，为证据引入病毒扫描和对象存储，补齐 KYC、用户管理、监管报送及高级规则；真实 Yente/Fineract 联调须取得目标地址、凭据和许可。
 
 \chapter{结论}
 当前系统已经形成结构清晰、可运行、可测试的 AML 核心业务平台。其主要价值在于将基础主数据、交易监控、预警处置、案件调查、筛查评分、统计报表和审计记录连接为可追溯闭环，并以 Flyway、自动化测试、容器化部署和清晰的外部适配边界保证工程可维护性。系统仍存在明确的功能和安全边界，部署到真实业务环境前必须完成安全加固、真实外部系统联调和监管要求评估。

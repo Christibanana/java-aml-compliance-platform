@@ -2,6 +2,7 @@ package com.example.aml.common;
 
 import com.example.aml.screening.ScreeningProviderException;
 import com.example.aml.integration.ExternalIntegrationException;
+import com.example.aml.auth.InvalidCredentialsException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.*;
@@ -13,6 +14,11 @@ import java.util.*;
 @RestControllerAdvice
 public class ApiExceptionHandler {
     public record ErrorBody(Instant timestamp, int status, String code, String message, String path, Map<String,String> fields) {}
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    ResponseEntity<ErrorBody> invalidCredentials(InvalidCredentialsException ex, HttpServletRequest req) {
+        return response(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", ex.getMessage(), req, Map.of());
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ErrorBody> badRequest(IllegalArgumentException ex, HttpServletRequest req) {
