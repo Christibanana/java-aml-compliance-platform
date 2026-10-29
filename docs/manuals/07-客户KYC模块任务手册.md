@@ -1,34 +1,21 @@
 # 客户 KYC 模块任务手册
 
-## 1. 模块目标
-管理合成客户、KYC 状态、风险等级与历史。
-## 2. 业务背景
-客户身份和风险是交易监测及调查的上下文。
-## 3. 功能需求
-客户新增/查询/详情/编辑、KYC 与风险历史。
-## 4. 业务流程
-录入脱敏资料→校验唯一编号→评估风险→保存历史。
-## 5. 数据库设计
-`aml_customer`、`aml_customer_kyc`、`aml_customer_risk(_history)`。
-## 6. 后端实现方案
-JPA 客户实体、Bean Validation、分页与审计。
-## 7. 前端页面设计
-客户列表、新增、编辑、状态维护、关键字查询和“查看账户”导航已实现。
-## 8. API 接口说明
-`GET/POST /api/customers`、`GET/PUT /api/customers/{id}`。
-## 9. 关键源码路径
-`backend/.../customer`、`frontend/src/views/CustomersView.vue`。
-## 10. 权限要求
-读取 `CUSTOMER_READ`，写入 `CUSTOMER_WRITE`。
-## 11. 异常处理
-重复编号、国家代码和必填字段不合法时拒绝。
-## 12. 测试用例
-重复编号、字段标准化、参数错误和真实客户创建 API 已通过自动化/HTTP 验证。
-## 13. 验收标准
-仅保存脱敏证件号，风险值限定 LOW/MEDIUM/HIGH。
-## 14. 已实现功能
-新增、分页/关键字查询、详情、编辑、启停、风险等级、脱敏证件字段与审计。
-## 15. 未实现功能
-KYC 工作流与风险历史写入仍未实现；本阶段只完成客户管理。
-## 16. 后续扩展建议
-增加字段加密、到期提醒与风险模型版本解释。
+## 1. 模块目标与边界
+在虚构客户资料上演示“提交脱敏摘要 → 人工审核 → 通过或退回 → 到期后重新提交”。不采集真实证件、不上传原件；审核结论不自动改变客户风险等级，也不代表满足任何特定司法辖区的监管要求。
+
+## 2. 业务流程
+具有 `CUSTOMER_WRITE` 权限的人员在客户页打开 KYC，填写不超过 500 字的合成/脱敏资料摘要并提交。记录进入 `PENDING`。具有 `KYC_REVIEW` 权限的人员填写理由，选择 `VERIFIED` 并指定未来的到期时间，或选择 `REJECTED` 退回。待审核状态不得重复提交或重复审核；已通过且尚未到期不得重新提交。到期后查询显示 `EXPIRED`，下一次提交时把旧记录置为过期、追加历史，再建立新一轮 `PENDING` 记录。退回后可重新提交。
+
+## 3. 数据与权限
+Flyway V7 扩展 `aml_customer_kyc` 的摘要、提交人/时间、审核人/时间、审核理由等字段，并新增只追加的 `aml_customer_kyc_history`。在客户行加锁的事务中校验状态，KYC 操作及安全审计同事务提交。读取要求 `CUSTOMER_READ`，提交要求 `CUSTOMER_WRITE`，审核要求新权限 `KYC_REVIEW`；V7 将审核权授予 `AML_MANAGER` 和 `SYSTEM_ADMIN`。客户端隐藏按钮不代替后端权限检查。
+
+## 4. 接口与页面
+- `GET /api/customers/{id}/kyc`：当前记录及历史，已过期的当前状态按有效期计算。
+- `POST /api/customers/{id}/kyc/submit`：`documentSummary` 必填。
+- `POST /api/customers/{id}/kyc/review`：`decision` 为 `VERIFIED` 或 `REJECTED`，`reason` 必填；通过时 `expiresAt` 必须是未来时间。
+- 客户列表每行的“KYC”打开详情弹窗，可提交、审核、查看到期时间及操作历史；所有按钮调用真实 API，错误由全局 API 处理器反馈。
+
+## 5. 验证与限制
+`KycAndRulePostgresIntegrationTest` 在 Flyway 初始化的 PostgreSQL 上覆盖提交、重复提交拒绝、分析员审核 403、通过、重复审核拒绝、到期查询、复审退回、历史与审计持久化、客户风险等级不变。三条浏览器测试中的第二条通过客户页提交/审核，第三条把 KYC 与账户、交易、默认三规则、预警、案件贯通。本轮后端全量 42/42、浏览器 3/3 通过，见 `docs/optimization/kyc-closure-report.md`。
+
+尚无自动到期提醒、证件原件采集、双人强制分离审核或正式法规判定。`EXPIRED` 在读取时是派生状态，只有再次提交才写入过期历史；不可将其描述为后台定时任务。

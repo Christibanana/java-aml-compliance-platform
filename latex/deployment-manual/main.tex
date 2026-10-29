@@ -6,7 +6,7 @@
 \pagenumbering{Roman}
 \chapter*{文档说明}
 \addcontentsline{toc}{chapter}{文档说明}
-本手册说明系统在 Windows + Docker Desktop 环境中的配置、构建、部署、验证、备份和故障处理，增量状态截至 2026 年 10 月 23 日。命令默认在项目根目录执行。涉及密码、密钥、目标外部服务和数据卷的操作，应遵循所在环境的安全与变更管理要求。
+本手册说明系统在 Windows + Docker Desktop 环境中的配置、构建、部署、验证、备份和故障处理，增量状态截至 2026 年 10 月 30 日。命令默认在项目根目录执行。涉及密码、密钥、目标外部服务和数据卷的操作，应遵循所在环境的安全与变更管理要求。
 \tableofcontents
 \clearpage
 \pagenumbering{arabic}
@@ -72,7 +72,7 @@ Copy-Item .env.example .env
 docker compose config --quiet
 docker compose --profile app build backend frontend
 \end{lstlisting}
-配置检查失败时先修正 YAML 或环境变量。镜像构建会执行后端 Maven 测试和前端生产构建；首次构建需要访问 Maven 和 npm 仓库。2026-10-23 当前工作区的完整后端测试仍有 4 个认证 Testcontainers 环境错误，因此本轮未重新宣称 Docker 镜像构建成功；在修复并完成 PostgreSQL 验收前，不应以历史镜像结果替代当前发布验证。
+配置检查失败时先修正 YAML 或环境变量。后端镜像只编译打包，不在 Docker 构建容器内编译或执行需要 Docker 守护进程的 Testcontainers 测试；应先在可访问 Docker 的宿主机运行完整 \code{mvn -B test}，再构建镜像。前端镜像仍执行生产构建；首次构建需要访问 Maven 和 npm 仓库。2026-10-23 的完整后端测试曾有 4 个 Testcontainers 环境错误；2026-10-30 在本机修正测试 Docker API 配置并使用缓存镜像后，完整测试 42/42 通过。本轮后端镜像构建因 Maven Central 下载依赖长时间无进展而中止，仍属待验证，不能以测试通过替代镜像发布验收。
 
 \section{启动与状态检查}
 \begin{lstlisting}
@@ -99,7 +99,7 @@ docker compose --profile app down
 
 \chapter{数据库迁移}
 \section{迁移机制}
-后端启动时 Flyway 自动执行 \code{backend/src/main/resources/db/migration} 下的 V1--V6，之后 Hibernate 以 validate 模式核对实体和数据库结构。禁止使用 Hibernate 自动建表替代 Flyway，也不应直接修改已经执行的迁移文件。
+后端启动时 Flyway 自动执行 \code{backend/src/main/resources/db/migration} 下的 V1--V7，之后 Hibernate 以 validate 模式核对实体和数据库结构。V7 扩大规则执行范围字段、增加 KYC 审核历史与权限。禁止使用 Hibernate 自动建表替代 Flyway，也不应直接修改已经执行的迁移文件。
 
 \section{迁移验证}
 \begin{lstlisting}
@@ -107,7 +107,7 @@ docker compose exec postgres psql -U aml -d aml \
   -c "select installed_rank, version, description, success \
       from flyway_schema_history order by installed_rank;"
 \end{lstlisting}
-预期 V1--V6 全部 success=true。若迁移失败，应保留日志和数据库现场，修复新迁移或配置后重试；不要直接删除历史表掩盖问题。
+预期 V1--V7 全部 success=true。若迁移失败，应保留日志和数据库现场，修复新迁移或配置后重试；不要直接删除历史表掩盖问题。
 
 \section{结构原则}
 金额使用 \code{numeric(19,4)}，时间使用 \code{timestamptz}，业务主键主要为 UUID。唯一约束覆盖外部交易编号、规则命中键和命中对应预警，以保证导入与告警幂等。
@@ -149,14 +149,14 @@ powershell -NoProfile -ExecutionPolicy Bypass \
 脚本验证登录、客户、账户、交易、Mock 筛查、规则、预警、案件关闭、评分、仪表盘、审计和 CSV。成功输出 \code{result=PASS}，且重复规则执行新增命中应为 0。
 
 \section{隔离浏览器测试}
-前端新增 3 条 Playwright/Edge 用例，只验证登录与退出、页面创建客户及账户、模拟 CSV 导入后单独执行 R001 并查看预警。需要 Windows PowerShell、JDK 21、Maven、Node、Docker Desktop 和本机 Microsoft Edge；先确保本机 55432、18080、15173 端口空闲。不要连接正式业务数据库。
+前端保留 3 条 Playwright/Edge 用例，验证登录退出、页面 KYC 审核与账户，以及同一虚构客户从 KYC、交易、默认三规则、R001 预警到升级案件。需要 Windows PowerShell、JDK 21、Maven、Node、Docker Desktop 和本机 Microsoft Edge；先确保 55432、18080、15173 端口空闲。不要连接正式业务数据库。
 \begin{lstlisting}
 & .\scripts\run-frontend-e2e.ps1 -JavaHome 'C:\path\to\jdk-21'
 \end{lstlisting}
-脚本使用 \code{compose.e2e.yaml} 启动项目名为 \code{aml-frontend-e2e} 的独立 PostgreSQL，数据目录为临时内存文件系统；随机生成仅供本轮使用的测试凭据，在 18080 启动后端、15173 启动 Vite，结束时关闭测试进程与容器。Playwright 配置检查数据库 URL 必须为本机 \code{aml_frontend_e2e}，不复用占用的端口。第三条用例只在该隔离库中停用 R002/R003 后执行 R001；这不是正常环境的规则停用建议。截图位置见前端 E2E 报告；失败 trace 存于被 Git 忽略的测试结果目录。
+脚本使用 \code{compose.e2e.yaml} 启动项目名为 \code{aml-frontend-e2e} 的独立 PostgreSQL，数据目录为临时内存文件系统；随机生成测试凭据，在 18080 启动后端、15173 启动 Vite，结束时关闭测试进程与容器。Playwright 配置要求数据库 URL 为本机 \code{aml_frontend_e2e}，不复用占用的端口。第三条用例保持 R001--R003 默认启用；截图位置见闭环验收报告，失败 trace 位于忽略提交的测试结果目录。
 
 \section{已验证结果}
-2026-10-15 历史回归中后端 32 个测试全部通过，前端构建成功，npm 生产依赖审计为 0 漏洞；PostgreSQL 16.10 空库完成 V1--V6；Compose 三服务正常；HTTP E2E 最终案件状态为 CLOSED。这些是历史结果，不代表当前工作区完整回归。2026-10-23 增量验证中，CSV/规则定向测试 9/9 通过；排除未提交的认证 PostgreSQL 测试后 36/36 通过；完整 \code{mvn -B test} 为 40 个用例、4 个 Testcontainers 环境错误，\textbf{未通过}。隔离 PostgreSQL + Edge 的 3 条浏览器用例连续三次 3/3 通过，前端构建通过，但默认三规则联合执行另有数据库字段长度故障。失败登录计数、锁定及失败审计仍需真正的 PostgreSQL 专项验收。详情分别见 \code{docs/optimization/transaction-rule-optimization.md} 和 \code{docs/optimization/frontend-e2e-report.md}。
+2026-10-15 的 32/32 与 2026-10-23 的完整测试 40 项中 4 个环境错误均是历史结果。2026-10-30 本轮在 JDK 21、PostgreSQL 16.10 与 Flyway V1--V7 上执行完整 \code{mvn -B test}：42/42 通过、0 失败、0 错误；包括认证 4 项与新增 KYC/联合规则 2 项。前端构建成功，隔离 Edge 浏览器三条用例最终 3/3 通过。首次测试被 Docker API 协商与 Ryuk 镜像拉取阻断；测试资源固定 API 1.44，本机运行环境关闭 Ryuk 并使用缓存 PostgreSQL 镜像。浏览器扩展用例首轮 2/3 因英文 OK 按钮定位错误，修正后全部重跑通过。详情见 \code{docs/optimization/kyc-closure-report.md}；不将本轮结果等同生产镜像或真实外部服务验收。
 
 \chapter{外部系统配置}
 \section{Yente}
@@ -189,7 +189,7 @@ docker compose exec -T postgres pg_dump -U aml -d aml -Fc \
 PostgreSQL unhealthy & 端口、密码、卷、磁盘空间 & 查看 postgres 日志，修正配置后重启 \\
 后端启动失败 & Flyway、JDK、数据库连接 & 检查 backend 日志与迁移历史 \\
 前端 502/空白 & backend 状态、Nginx 代理、静态文件 & 检查三服务状态并重新构建前端 \\
-默认规则执行失败 & scope 字段长度 & 三规则版本范围超过 \code{varchar(30)} 时插入执行记录即失败，此路径没有 FAILED 记录；保存后端异常日志，待新 Flyway 迁移和 PostgreSQL 回归验证 \\
+规则执行失败 & 迁移版本、启用状态、执行日志 & 确认 V7 已应用；历史 V1--V6 的 \code{scope varchar(30)} 不支持默认三规则，请先迁移，不要直接修改旧脚本 \\
 浏览器 E2E 无法启动 & Edge、Docker、55432/18080/15173 端口 & 不复用既有服务；检查独立脚本输出和测试日志，不能标记为通过 \\
 端口被占用 & 5432/8080/5173 & 使用 AML\_*\_HOST\_PORT 覆盖宿主端口 \\
 Docker WSL 异常 & VHD 附加、I/O、磁盘空间 & 停止 Docker，执行 \code{wsl --shutdown} 后重启；先备份，禁止直接重置 \\
@@ -211,5 +211,5 @@ PDF 无法预览 & PDF 关联、LaTeX Workshop、XeLaTeX 输出 & 使用 MiKTeX 
 \end{itemize}
 
 \chapter{当前部署边界}
-Compose 配置适用于本地或受控单机环境，backend/frontend 尚未配置原生 Compose healthcheck。系统没有内置 TLS、高可用、集中日志、自动备份、病毒扫描和生产密钥托管。当前完整后端回归与默认三规则联合执行均未通过；不得把 R001 隔离用例的成功外推为全规则可用。Yente/Fineract 真实服务未联调，R004--R008 等高级规则未实现。在进入正式业务环境前，应完成缺陷修复、安全评审、容量测试、灾备设计、真实集成验证和监管要求映射。
+Compose 配置适用于本地或受控单机环境，backend/frontend 尚未配置原生 Compose healthcheck。系统没有内置 TLS、高可用、集中日志、自动备份、病毒扫描和生产密钥托管。本轮后端及浏览器闭环虽已通过，但未重建生产镜像；Yente/Fineract 真实服务未联调，R004--R008 等高级规则未实现，KYC 也没有自动到期提醒。在进入正式业务环境前，应完成安全评审、容量测试、灾备设计、真实集成验证和监管要求映射。
 \end{document}

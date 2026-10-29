@@ -2,15 +2,17 @@
 
 ## 1. 基线与约定
 
-数据库为 PostgreSQL 16，结构由 Flyway V1–V6 唯一管理，应用使用 `spring.jpa.hibernate.ddl-auto=validate`。主键统一为 UUID；时间使用 `timestamptz` 并按 UTC 存储；金额使用 `numeric(19,4)`；业务编号设唯一约束；业务数据不提供物理删除接口。
+数据库为 PostgreSQL 16，结构由 Flyway V1–V7 唯一管理，应用使用 `spring.jpa.hibernate.ddl-auto=validate`。主键统一为 UUID；时间使用 `timestamptz` 并按 UTC 存储；金额使用 `numeric(19,4)`；业务编号设唯一约束；业务数据不提供物理删除接口。
 
-2026-10-14 在独立空库实测结果：6 条迁移全部 `success=true`，public 下 35 张基础表（34 张应用表加 `flyway_schema_history`）、49 个外键、81 个索引，应用随后通过 Hibernate schema 校验并启动。
+2026-10-14 在独立空库实测 V1–V6：6 条迁移全部 `success=true`，public 下 35 张基础表（34 张应用表加 `flyway_schema_history`）、49 个外键、81 个索引。2026-10-30 的 Testcontainers PostgreSQL 已执行 V1–V7、完成 Hibernate 校验并通过完整后端测试；未重新统计总索引数。
 
 ## 2. 核心关系
 
 ```mermaid
 erDiagram
   AML_CUSTOMER ||--o{ AML_ACCOUNT_CUSTOMER : relates
+  AML_CUSTOMER ||--o{ AML_CUSTOMER_KYC : verifies
+  AML_CUSTOMER_KYC ||--o{ AML_CUSTOMER_KYC_HISTORY : records
   AML_ACCOUNT ||--o{ AML_ACCOUNT_CUSTOMER : belongs
   AML_ACCOUNT ||--o{ AML_TRANSACTION : posts
   AML_TRANSACTION_IMPORT_BATCH ||--o{ AML_TRANSACTION : imports
@@ -42,7 +44,7 @@ erDiagram
 | 权限 | `sys_user`、`sys_role`、`sys_permission` | 用户、角色、权限；用户名/角色码/权限码唯一 |
 | 权限 | `sys_user_role`、`sys_role_permission` | 多对多连接表，复合主键 |
 | 审计 | `sys_audit_log` | 操作者、动作、资源、结果、IP、JSON 详情和时间，只追加 |
-| 客户 | `aml_customer`、`aml_customer_kyc` | 客户主数据及 KYC 占位记录；客户编号唯一，只存脱敏证件号 |
+| 客户 | `aml_customer`、`aml_customer_kyc`、`aml_customer_kyc_history` | 客户主数据、KYC 当前轮次与审核历史；客户编号唯一，演示仅用脱敏摘要 |
 | 客户风险 | `aml_customer_risk`、`aml_customer_risk_history` | 每客户一个当前快照和只追加评分历史 |
 | 账户 | `aml_account`、`aml_account_customer` | 账户及客户关系；账户编号唯一，关系表复合主键 |
 | 交易 | `aml_transaction_import_batch`、`aml_transaction` | 导入批次和流水；`source + external_id` 唯一 |

@@ -1,11 +1,12 @@
 # API 清单
 
-运行中 OpenAPI 实测为 48 个路径、53 个操作。基础路径 `/api`；登录外的业务接口需要 Bearer JWT，并由后端 `@PreAuthorize` 校验。
+2026-10-15 历史 OpenAPI 实测为 48 个路径、53 个操作；V7 新增 KYC 三条操作，本轮未重新统计当前总数。基础路径 `/api`；登录外的业务接口需要 Bearer JWT，并由后端 `@PreAuthorize` 校验。
 
 | 领域 | 方法与路径 | 权限 | 状态/说明 |
 |---|---|---|---|
-| 登录 | `POST /auth/login` | 匿名 | 历史成功登录已验证；旧版失败计数/锁定缺陷已确认，工作区修复待 PostgreSQL 验证 |
+| 登录 | `POST /auth/login` | 匿名 | 当前统一 401、失败计数、锁定与审计已由 PostgreSQL 集成测试验证 |
 | 客户 | `GET,POST /customers`；`GET,PUT /customers/{id}` | READ/WRITE | 已实现并验证 |
+| 客户 KYC | `GET /customers/{id}/kyc`；`POST /customers/{id}/kyc/submit`、`/review` | CUSTOMER_READ/WRITE、KYC_REVIEW | 2026-10-30 PostgreSQL 与浏览器验证 |
 | 账户 | `GET,POST /accounts`；`GET /accounts/{id}`；`PUT /accounts/{id}/status` | CUSTOMER_READ/ACCOUNT_WRITE | 已实现并验证 |
 | 交易 | `GET /transactions` | CUSTOMER_READ | 已实现并验证 |
 | 本地导入 | `POST /transactions/import`；`GET /transactions/template` | TRANSACTION_IMPORT | 已实现并验证 |

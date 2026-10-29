@@ -1,5 +1,15 @@
 # 测试结果
 
+## 2026-10-30 KYC 与默认三规则闭环验收
+
+在 JDK 21、Docker Desktop 29.8.2、PostgreSQL 16.10-alpine 环境，运行 `mvn -B test`：42 tests，0 failures，0 errors，0 skipped，BUILD SUCCESS。包含认证失败计数/锁定/审计 4 项与 Flyway V1--V7 的 KYC/三规则 PostgreSQL 集成 2 项。Docker 29 与 Testcontainers 1.21.3 的 API 协商曾使首轮失败；测试资源固定 API 1.44 后可启动。由于本机无法拉取 Ryuk 镜像，本轮仅在进程环境中设置 `TESTCONTAINERS_RYUK_DISABLED=true`，测试容器由 JVM 退出关闭。
+
+`npm run build` 成功；`scripts/run-frontend-e2e.ps1` 的 3 条 Edge/Playwright 测试最终 3/3 通过，覆盖登录退出、客户页 KYC 审核与账户，以及同一虚构客户从 KYC 到默认三规则、R001 预警、升级案件。扩展浏览器测试首轮 2/3，原因是测试把 Element Plus 的英文 `OK` 按钮误写为“确定”；修正定位器后重跑 3/3。未测量性能，也未进行真实外部系统联调。详细命令、失败记录与证据见 `docs/optimization/kyc-closure-report.md`。
+
+本轮另尝试 `docker compose --profile app build backend`；Maven Central 下载 Testcontainers 依赖长时间无进展，人工中止。镜像构建标记为**待验证**，不计入上述测试通过结果。
+
+宿主机 `mvn -B '-Dmaven.test.skip=true' package` 成功；首次未给 PowerShell 的 `-D` 参数加引号导致 Maven 命令解析错误，修正后通过。该命令跳过测试，不替代完整 `mvn -B test`。
+
 ## 2026-10-23 v1.1.3 增量验证
 
 JDK 21 下 `mvn -B -DskipTests compile` 成功；CSV、规则和核心闭环定向测试 9/9 通过；排除上一轮未提交的认证 PostgreSQL 测试后，`mvn -B -Dtest=*,!AuthPostgresIntegrationTest test` 为 36/36 通过。完整 `mvn -B test` 执行 40 个测试、0 断言失败、4 个环境错误：`AuthPostgresIntegrationTest` 的 Testcontainers 未发现可用 Docker 环境。详见 `docs/optimization/transaction-rule-optimization.md`；不将完整回归标为通过。

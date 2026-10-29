@@ -2,7 +2,7 @@
 
 ## 迁移实测
 
-Flyway 共 6 个版本：V1 初始结构，V2 客户/账户/交易约束，V3 规则/预警扩展，V4 禁用规划规则，V5 案件证据扩展，V6 筛查与评分。独立空库实测 V1–V6 全部 `success=true`；共 34 张应用表、49 个外键、81 个索引。临时数据库和容器已在验证后删除。
+2026-10-14 历史清单：Flyway V1–V6 共 34 张应用表、49 个外键、81 个索引。2026-10-30 新增 V7：规则执行 `scope` 扩容、KYC 审核字段与历史表、审核权限；Testcontainers PostgreSQL 真实迁移与完整测试通过。下方未逐项更新的旧数量仅代表历史基线。
 
 ## 表清单
 
@@ -10,7 +10,7 @@ Flyway 共 6 个版本：V1 初始结构，V2 客户/账户/交易约束，V3 �
 |---|---|---|
 | RBAC | `sys_user`、`sys_role`、`sys_permission`、`sys_user_role`、`sys_role_permission` | 用户、角色、权限及多对多关系 |
 | 审计 | `sys_audit_log` | 操作者、动作、资源、结果、IP、详情、时间 |
-| 客户/KYC | `aml_customer`、`aml_customer_kyc` | 客户主数据；KYC 表当前无业务代码 |
+| 客户/KYC | `aml_customer`、`aml_customer_kyc`、`aml_customer_kyc_history` | 客户主数据；KYC 提交、审核、到期复审和历史已实现 |
 | 客户评分 | `aml_customer_risk`、`aml_customer_risk_history` | 当前快照和只追加历史 |
 | 账户 | `aml_account`、`aml_account_customer` | 账户及客户多对多关系 |
 | 交易 | `aml_transaction_import_batch`、`aml_transaction` | 批次与交易；`source+external_id` 去重 |

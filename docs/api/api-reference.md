@@ -11,13 +11,16 @@ Content-Type: application/json
 {"username":"admin","password":"ChangeMe123!"}
 ```
 
-成功响应包含 `token/tokenType/displayName/roles/permissions`。既有设计为连续失败 5 次锁定 15 分钟，到期自动放行、成功登录重置计数。旧版失败事务回滚已确认；当前工作区独立事务修复与统一 401 响应尚未通过 PostgreSQL 集成测试，不可作为已验收 API 契约。生产部署不得使用演示口令。
+成功响应包含 `token/tokenType/displayName/roles/permissions`。连续失败 5 次锁定 15 分钟，到期自动放行、成功登录重置计数；认证失败统一返回 401。旧版失败事务回滚是历史缺陷，2026-10-30 独立事务修复已由 `AuthPostgresIntegrationTest` 4/4 验证。生产部署不得使用演示口令。
 
 | 方法 | 路径 | 权限 | 状态 |
 |---|---|---|---|
 | POST | `/auth/login` | 匿名 | 已实现 |
 | GET/POST | `/customers` | CUSTOMER_READ/WRITE | 已实现：分页、关键字查询、新增 |
 | GET/PUT | `/customers/{id}` | CUSTOMER_READ/WRITE | 已实现：详情、编辑与停用 |
+| GET | `/customers/{id}/kyc` | CUSTOMER_READ | 当前 KYC 与历史；到期状态按有效期派生 |
+| POST | `/customers/{id}/kyc/submit` | CUSTOMER_WRITE | 提交不超过 500 字的合成/脱敏 `documentSummary`；返回 PENDING |
+| POST | `/customers/{id}/kyc/review` | KYC_REVIEW | `decision` 为 VERIFIED/REJECTED，`reason` 必填；VERIFIED 时 `expiresAt` 必须为未来时间 |
 | GET/POST | `/accounts` | CUSTOMER_READ/ACCOUNT_WRITE | 已实现：分页、按客户筛选、新增及客户关系 |
 | GET/PUT | `/accounts/{id}`、`/accounts/{id}/status` | CUSTOMER_READ/ACCOUNT_WRITE | 已实现：详情、启用/冻结/关闭 |
 | GET | `/transactions` | CUSTOMER_READ | 已实现：按客户或账户筛选 |

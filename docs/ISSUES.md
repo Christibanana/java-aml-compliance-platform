@@ -1,5 +1,9 @@
 # 问题与阻塞记录
 
+## 2026-10-30 当前状态
+
+旧版 `scope varchar(30)` 的默认三规则故障已由 Flyway V7 修复并用 PostgreSQL/Edge 验证；认证 Testcontainers 测试在固定 Docker API 1.44 与本机关闭不可下载的 Ryuk 后通过。仍需在正常镜像拉取环境验证 Testcontainers 清理机制；KYC 尚无自动提醒与强制双人复核，系统仍不具备生产监管用途。见 `docs/optimization/kyc-closure-report.md`。
+
 ## v1.1.3 全量测试未通过（2026-10-23）
 
 - `mvn -B test` 执行 40 个测试，0 断言失败、4 个错误，全部来自上一轮未提交的 `AuthPostgresIntegrationTest` 静态容器初始化；Testcontainers 报 `Could not find a valid Docker environment`，尽管本机 `docker info` 可读。尚未解决该环境适配问题，不将认证测试或全量回归标为通过。

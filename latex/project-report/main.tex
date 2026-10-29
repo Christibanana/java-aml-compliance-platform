@@ -6,7 +6,7 @@
 \pagenumbering{Roman}
 \chapter*{文档说明}
 \addcontentsline{toc}{chapter}{文档说明}
-本文档基于项目源码、Flyway 迁移、接口定义和实际测试结果编制，增量状态截至 2026 年 10 月 23 日；历史验收与当前工作区结果分别列示。页面和业务记录来自测试环境，不包含真实客户、账户或金融交易数据。规则阈值、筛查结果和风险评分用于软件功能验证，不构成监管判断或业务决策。
+本文档基于项目源码、Flyway 迁移、接口定义和实际测试结果编制，增量状态截至 2026 年 10 月 30 日；历史验收与当前工作区结果分别列示。页面和业务记录来自测试环境，不包含真实客户、账户或金融交易数据。规则阈值、筛查结果和风险评分用于软件功能验证，不构成监管判断或业务决策。
 
 \begin{longtable}{p{0.18\textwidth}p{0.68\textwidth}}
 \toprule 项目 & 内容 \\ \midrule
@@ -41,7 +41,7 @@
 \section{范围与边界}
 \begin{longtable}{p{0.22\textwidth}p{0.31\textwidth}p{0.31\textwidth}}
 \toprule 领域 & 当前范围 & 边界说明 \\ \midrule
-核心业务 & 客户、账户、交易、规则、预警、案件 & R001 定向浏览器闭环通过；默认三规则联合执行存在已知故障 \\
+核心业务 & 客户、KYC、账户、交易、规则、预警、案件 & 默认三规则联合执行及 KYC 到案件浏览器闭环通过 \\
 筛查评分 & Mock/Yente 适配、人工复核、客户和交易评分 & Yente 未连接真实服务；评分为固定规则模型 \\
 统计审计 & 仪表盘、四类业务 CSV、审计查询和导出 & 未实现正式监管报送生命周期 \\
 外部集成 & AMLSim CSV、Fineract 流水 API、Yente Match API & AMLSim 为离线导入；Fineract/Yente 未实连 \\
@@ -58,7 +58,7 @@
 \begin{longtable}{p{0.14\textwidth}p{0.31\textwidth}p{0.39\textwidth}}
 \toprule 编号 & 功能 & 关键要求 \\ \midrule
 FR-01 & 身份认证与授权 & BCrypt 密码、JWT、后端权限校验、会话失效处理 \\
-FR-02 & 客户与账户 & 客户维护、账户关联、状态约束、分页与条件查询 \\
+FR-02 & 客户、KYC 与账户 & 客户维护、KYC 人工审核与历史、账户关联、状态约束 \\
 FR-03 & 交易数据 & CSV/AMLSim 导入、字段校验、批次记录、来源与外部编号去重 \\
 FR-04 & 规则监控 & 规则版本、参数校验、时间窗口统计、执行记录和幂等命中 \\
 FR-05 & 预警处置 & 自动生成、分页详情、分派、状态流转和历史记录 \\
@@ -103,19 +103,23 @@ FR-08 & 统计审计 & 实时数据库统计、CSV 导出、审计筛选与权�
 
 \chapter{核心业务设计}
 \section{客户、账户与交易}
-客户是平台的主体对象，账户通过关联表与客户建立关系，交易归属于账户。平台及 AMLSim CSV 使用 UTF-8 流式解析，支持可选 BOM、引号、字段内逗号及换行、转义双引号和空字段。导入先创建批次，再按记录完成表头、金额、时间、币种、账户状态和编号校验；最多积累 100 条有效记录后独立提交，坏记录保留定位和错误计数，已提交块不会被后续坏记录整体回滚。\code{source + external_id} 唯一约束构成跨批次幂等边界。文件级错误会标记批次失败；尚未实现断点续传或吞吐性能基准。
+客户是平台的主体对象，账户通过关联表与客户建立关系，交易归属于账户。KYC 在客户页保存脱敏资料摘要，经过待审核、通过或退回；通过记录到期后允许重新提交，当前状态与历史可追溯，审核结论不自动修改客户风险等级。平台及 AMLSim CSV 使用 UTF-8 流式解析，支持可选 BOM、引号、字段内逗号及换行、转义双引号和空字段。导入最多积累 100 条有效记录后独立提交，坏记录保留定位和错误计数，已提交块不会被后续坏记录整体回滚。\code{source + external_id} 唯一约束构成跨批次幂等边界；尚未实现断点续传或吞吐性能基准。
 \shot{0.94}{03-customers.png}{客户管理}
+\begin{figure}[H]\centering
+\fcolorbox{AmlLight}{white}{\includegraphics[width=0.94\textwidth,height=0.67\textheight,keepaspectratio]{../../docs/optimization/screenshots/frontend-e2e-kyc.png}}
+\caption{KYC 审核状态与操作历史（合成数据）}
+\end{figure}
 \shot{0.94}{04-accounts.png}{账户管理}
 \shot{0.94}{05-transactions.png}{交易查询与数据导入}
 
 \section{规则执行与预警生成}
 规则库保存定义、版本和参数。后端执行接口可传规则代码和 \code{asOf}，当前网页上的“执行规则检测”按钮则默认请求所有已启用的 R001--R003，未提供时间输入。R001 在数据库按金额阈值筛选，仍覆盖截至执行时刻的历史交易；R002/R003 分别使用配置的分钟/小时窗口查询，再构造 Drools 事实对象。命中保存参与交易并生成预警，重复命中键不会重复写入。运行状态在独立事务中保存，业务事务失败后可保留 FAILED、处理数和非敏感错误类别。
-当前真实 PostgreSQL 浏览器测试发现：默认三规则联合执行时，版本范围字符串超过 \code{aml_rule_execution.scope} 的 \code{varchar(30)}，执行失败且不生成该次预警。该错误发生在执行记录插入阶段，本次不会留下 FAILED 行，需依据后端异常日志排查。隔离测试库中只启用 R001 后完成了导入、规则命中和预警详情闭环；这不等于默认联合执行已通过。修复需通过新的 Flyway 迁移扩大字段并补 PostgreSQL 回归测试，本轮文档更新不修改业务逻辑。
+2026-10-23 的真实 PostgreSQL 浏览器测试曾发现三规则版本范围超过 \code{scope varchar(30)}，执行记录插入失败且无该次 FAILED 行。Flyway V7 将字段扩为 \code{varchar(160)}；本轮 PostgreSQL 回归与浏览器均验证默认启用 R001--R003 的执行成功及 R001 预警，不再依赖停用其他规则。阈值和业务判断未改。
 \shot{0.94}{06-rules.png}{监控规则、版本与执行记录}
 \shot{0.94}{07-alerts.png}{风险预警查询与处置}
 \begin{figure}[H]\centering
 \fcolorbox{AmlLight}{white}{\includegraphics[width=0.94\textwidth,height=0.67\textheight,keepaspectratio]{../../docs/optimization/screenshots/frontend-e2e-r001-alert.png}}
-\caption{R001 单规则浏览器端到端验证的预警详情（合成数据）}
+\caption{默认三规则执行后的 R001 预警详情（合成数据）}
 \end{figure}
 
 \section{案件调查闭环}
@@ -134,7 +138,7 @@ FR-08 & 统计审计 & 实时数据库统计、CSV 导出、审计筛选与权�
 
 \chapter{数据设计}
 \section{迁移策略}
-数据库使用 PostgreSQL 16.10，结构由 Flyway V1--V6 管理，Hibernate 设置为 \code{ddl-auto=validate}。独立空库迁移验证得到 34 张应用表、49 个外键和 81 个索引，另有 \code{flyway_schema_history}。金额字段使用 \code{numeric(19,4)}，时间字段使用 \code{timestamptz}，主要实体使用 UUID 主键。
+数据库使用 PostgreSQL 16.10，结构由 Flyway V1--V7 管理，Hibernate 设置为 \code{ddl-auto=validate}。2026-10-15 的 V1--V6 历史空库迁移得到 34 张应用表；V7 新增 KYC 历史表、审核字段与权限，并扩展规则执行范围字段。本轮 Testcontainers 对 V1--V7 完整迁移和实体校验通过。金额字段使用 \code{numeric(19,4)}，时间字段使用 \code{timestamptz}，主要实体使用 UUID 主键。
 
 \Needspace{0.62\textheight}
 \section{数据域与主要表}
@@ -155,7 +159,7 @@ FR-08 & 统计审计 & 实时数据库统计、CSV 导出、审计筛选与权�
 
 \chapter{接口与安全设计}
 \section{接口概况}
-OpenAPI 实测包含 48 个路径、53 个操作，业务基础路径为 \code{/api}。登录以外的接口需要 Bearer JWT。主要资源包括 \code{/customers}、\code{/accounts}、\code{/transactions}、\code{/rules}、\code{/alerts}、\code{/cases}、\code{/screenings}、\code{/risk-scores}、\code{/dashboard}、\code{/reports} 和 \code{/audit-logs}。
+2026-10-15 历史 OpenAPI 实测包含 48 个路径、53 个操作；本轮新增三条 KYC 操作，未重新统计当前总数。业务接口以 \code{/api} 为前缀，登录以外需要 Bearer JWT。客户 KYC 位于客户资源下；规则、预警、案件等接口清单及权限见 API 手册。
 
 \section{安全控制}
 \begin{itemize}
@@ -167,7 +171,7 @@ OpenAPI 实测包含 48 个路径、53 个操作，业务基础路径为 \code{/
 \end{itemize}
 
 \section{已知安全问题}
-2026-10-15 历史基线中，错误密码路径的失败次数和失败审计与登录事务共同回滚，锁定未实际生效，错误口令返回 400。当前工作区已编写独立事务、行级锁及统一 401 响应的修复代码，但 PostgreSQL Testcontainers 测试尚未完成，不将失败锁定和失败审计列为已验证能力。生产部署还需要 TLS、密钥托管、病毒扫描、集中日志、备份恢复和最小权限数据库账号。
+2026-10-15 历史基线中，错误密码路径的失败次数和失败审计与登录事务共同回滚，锁定未实际生效。现采用独立事务、行级锁和统一 401 响应；2026-10-30 的四项 PostgreSQL 测试已覆盖持久化、五次锁定、到期解锁、成功重置、未知用户统一响应与并发失败计数。生产部署仍需要 TLS、密钥托管、病毒扫描、集中日志、备份恢复和最小权限数据库账号。
 
 \chapter{外部系统集成}
 \begin{longtable}{p{0.18\textwidth}p{0.31\textwidth}p{0.34\textwidth}}
@@ -209,22 +213,26 @@ CSV/规则定向测试 & JDK 21 下 9/9 通过；覆盖多行 CSV、重复与分
 默认三规则执行 & \code{scope} 超过 \code{varchar(30)}，PostgreSQL 拒绝写入 & 未通过 \\
 \bottomrule
 \end{longtable}
-浏览器测试的 R001 用例在隔离库中停用 R002/R003 后执行；登录成功与退出已验证，不代表错误密码计数、锁定或失败审计通过 PostgreSQL 验收。性能提升没有实际测量，不填写数值。
+上述为 2026-10-23 的历史结果；该轮浏览器测试曾在隔离库中停用 R002/R003，不能用于判断 10 月 30 日的新版本。性能提升没有实际测量，不填写数值。
+
+\section{2026 年 10 月 30 日闭环复验}
+Flyway V7 的真实 PostgreSQL 测试覆盖默认三规则联合执行、重复执行幂等、KYC 状态与审计；认证专测覆盖失败次数、锁定、到期解锁和并发。完整 \code{mvn -B test} 为 42/42 通过、0 失败、0 错误。前端构建成功；隔离 PostgreSQL 与 Edge 的三条浏览器测试最终 3/3 通过，第三条贯通同一虚构客户的 KYC、账户、CSV、默认三规则、R001 预警和案件升级。扩展测试首次因提示框按钮定位错误仅 2/3，通过修正测试定位器后重跑成功。浏览器未验证案件关闭；该动作仍由既有后端测试覆盖。实际失败与环境处理见 \code{docs/optimization/kyc-closure-report.md}。
 
 \chapter{完成情况与演进计划}
 \begin{longtable}{p{0.28\textwidth}p{0.20\textwidth}p{0.38\textwidth}}
 \toprule 模块 & 状态 & 说明 \\ \midrule
 客户、账户、交易 & \statusok & 后端、前端、迁移、测试和 E2E 均具备 \\
-R001--R003 与预警 & \statuspart & 定向规则与 R001 预警通过；默认联合执行被字段长度阻断 \\
+R001--R003 与预警 & \statusok & V7 后默认联合执行、幂等和 R001 预警已由 PostgreSQL/浏览器验证 \\
 案件调查 & \statusok & 分派、笔记、证据、状态机和关闭已验证 \\
 Mock 筛查与风险评分 & \statusok & 人工复核、快照和历史已验证 \\
 真实 Yente/Fineract & \statuspart & 适配器契约通过，目标服务未实连 \\
-KYC、用户管理、监管报送 & \statuspart & 具有部分表或基础模型，缺完整业务功能 \\
+KYC & \statusok & 提交、人工审核、退回、到期复审和历史已验证；无自动提醒 \\
+用户管理、监管报送 & \statuspart & 仅有基础模型或占位表，缺完整业务功能 \\
 R004--R008 与图分析 & \statusno & 仅规划或未实现 \\
 \bottomrule
 \end{longtable}
 
-历史 32 个测试及本轮浏览器登录成功用例均不包含失败登录的 PostgreSQL 事务与并发验收。优先修复规则执行范围字段容量、完成认证集成测试并恢复全量回归；随后验证趋势统计时区边界，扩展浏览器兼容性与 CI，为证据引入病毒扫描和对象存储，补齐 KYC、用户管理、监管报送及高级规则；真实 Yente/Fineract 联调须取得目标地址、凭据和许可。
+本轮已修复规则执行字段容量并完成认证 PostgreSQL 验收。后续应优先验证趋势统计时区边界、完善 KYC 到期提醒与隐私保护，再按项目需要扩展用户管理和部署安全。R004--R008、正式监管报送及真实 Yente/Fineract 联调仍不在当前完成范围。
 
 \chapter{结论}
 当前系统已经形成结构清晰、可运行、可测试的 AML 核心业务平台。其主要价值在于将基础主数据、交易监控、预警处置、案件调查、筛查评分、统计报表和审计记录连接为可追溯闭环，并以 Flyway、自动化测试、容器化部署和清晰的外部适配边界保证工程可维护性。系统仍存在明确的功能和安全边界，部署到真实业务环境前必须完成安全加固、真实外部系统联调和监管要求评估。

@@ -33,6 +33,16 @@ async function createSyntheticAccount(request: APIRequestContext, token: string)
   });
   expect(customer.ok(), await customer.text()).toBeTruthy();
   const customerId = (await customer.json()).id as string;
+  const submitted = await request.post(`/api/customers/${customerId}/kyc/submit`, {
+    headers, data: { documentSummary: 'Synthetic masked identity summary' },
+  });
+  expect(submitted.ok(), await submitted.text()).toBeTruthy();
+  const reviewed = await request.post(`/api/customers/${customerId}/kyc/review`, {
+    headers, data: { decision: 'VERIFIED', reason: 'Synthetic data checked',
+      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() },
+  });
+  expect(reviewed.ok(), await reviewed.text()).toBeTruthy();
+  expect((await reviewed.json()).current.status).toBe('VERIFIED');
   const account = await request.post('/api/accounts', {
     headers,
     data: { accountNo, currency: 'CNY', customerId, relationType: 'OWNER', ownershipPercent: 100 },
@@ -67,6 +77,16 @@ test('创建客户、创建账户、查询关联信息', async ({ page }) => {
   await page.getByRole('button', { name: '查询' }).click();
   const customerRow = page.getByRole('row').filter({ hasText: customerNo });
   await expect(customerRow).toContainText(customerName);
+  await customerRow.getByRole('button', { name: 'KYC' }).click();
+  const kycDialog = page.getByRole('dialog', { name: new RegExp(`客户 KYC.*${customerName}`) });
+  await kycDialog.getByPlaceholder('仅记录虚构或脱敏的核验摘要').fill('Synthetic masked identity summary');
+  await kycDialog.getByRole('button', { name: '提交审核' }).click();
+  await expect(kycDialog).toContainText('PENDING');
+  await kycDialog.getByPlaceholder('填写审核依据或退回原因').fill('Synthetic data checked');
+  await kycDialog.getByRole('button', { name: '审核通过' }).click();
+  await expect(kycDialog).toContainText('VERIFIED');
+  await capture(page, 'frontend-e2e-kyc.png');
+  await kycDialog.getByRole('button', { name: 'Close' }).click();
   await customerRow.getByRole('button', { name: '查看账户' }).click();
   await expect(page.getByRole('heading', { name: '账户管理' })).toBeVisible();
   await page.getByRole('button', { name: '新增账户' }).click();
@@ -80,7 +100,7 @@ test('创建客户、创建账户、查询关联信息', async ({ page }) => {
   await capture(page, 'frontend-e2e-customer-account.png');
 });
 
-test('导入模拟交易、执行 R001、生成并查看预警', async ({ page, request }) => {
+test('KYC、模拟交易、默认三规则、预警与案件', async ({ page, request }) => {
   await login(page);
   const token = await page.evaluate(() => localStorage.getItem('aml_token'));
   expect(token).toBeTruthy();
@@ -106,16 +126,12 @@ test('导入模拟交易、执行 R001、生成并查看预警', async ({ page, 
   await expect(page.getByRole('row').filter({ hasText: externalId })).toBeVisible();
 
   await page.getByRole('menuitem', { name: '规则管理' }).click();
-  for (const code of ['AML-R002', 'AML-R003']) {
-    const row = page.getByRole('row').filter({ hasText: code });
-    await row.getByRole('button', { name: '停用' }).click();
-    await expect(page.getByRole('row').filter({ hasText: code }).getByRole('button', { name: '启用' })).toBeVisible();
-  }
   const execution = page.waitForResponse(response => response.url().endsWith('/api/rules/execute') && response.request().method() === 'POST');
   await page.getByRole('button', { name: '执行规则检测' }).click();
   const executionResponse = await execution;
   expect(executionResponse.status()).toBe(200);
   const result = await executionResponse.json() as { rules: Array<{ code: string; newHits: number }> };
+  expect(result.rules.map(rule => rule.code)).toEqual(['AML-R001', 'AML-R002', 'AML-R003']);
   expect(result.rules.find(rule => rule.code === 'AML-R001')?.newHits).toBeGreaterThanOrEqual(1);
 
   await page.getByRole('menuitem', { name: '预警中心' }).click();
@@ -128,4 +144,22 @@ test('导入模拟交易、执行 R001、生成并查看预警', async ({ page, 
   await expect(drawer).toContainText(externalId);
   await page.waitForTimeout(500);
   await capture(page, 'frontend-e2e-r001-alert.png');
+  await drawer.getByRole('button', { name: '开始审核' }).click();
+  const reviewDialog = page.getByRole('dialog', { name: '开始审核' });
+  await reviewDialog.getByRole('textbox').fill('Synthetic alert reviewed');
+  await reviewDialog.getByRole('button', { name: 'OK' }).click();
+  await expect(drawer.getByRole('button', { name: '升级案件' })).toBeVisible();
+  await drawer.getByRole('button', { name: '升级案件' }).click();
+  const caseTitle = `Synthetic investigation ${unique()}`;
+  const escalateDialog = page.getByRole('dialog', { name: '升级案件' });
+  await escalateDialog.getByRole('textbox').fill(caseTitle);
+  await escalateDialog.getByRole('button', { name: 'OK' }).click();
+  await page.getByRole('menuitem', { name: '案件管理' }).click();
+  await page.getByPlaceholder('案件号 / 标题').fill(caseTitle);
+  await page.getByRole('button', { name: '查询' }).click();
+  const caseRow = page.getByRole('row').filter({ hasText: caseTitle });
+  await expect(caseRow).toBeVisible();
+  await caseRow.click();
+  await expect(page.getByRole('dialog', { name: '案件调查工作台' })).toContainText('AML-R001');
+  await capture(page, 'frontend-e2e-case.png');
 });
